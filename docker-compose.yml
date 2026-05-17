@@ -1,0 +1,46 @@
+services:
+  srm_db:
+    image: postgres:18-alpine
+    container_name: srm_postgres
+    
+    env_file:
+     - ./srm-backend/.env
+    
+    ports:
+      - "5432:5432"
+    volumes:
+      - srm_postgres_data:/var/lib/postgresql/data
+      - ./srm-backend/db_init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+
+  srm_backend:
+    build: ./srm-backend
+    container_name: srm_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./srm-backend:/app
+    env_file:
+      - ./srm-backend/.env
+    depends_on:
+      - srm_db
+    restart: unless-stopped
+
+  srm_frontend:
+    build: ./srm-frontend
+    container_name: srm_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./srm-frontend:/app
+      # Анонімний том для node_modules, щоб локальні файли не "затерли" модулі контейнера
+      - /app/node_modules
+    environment:
+      # Змінна для фронтенду, щоб він знав, куди відправляти fetch-запити
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - srm_backend
+    restart: unless-stopped
+
+volumes:
+  srm_postgres_data:

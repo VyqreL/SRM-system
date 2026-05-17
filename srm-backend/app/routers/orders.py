@@ -1,0 +1,151 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session, joinedload
+from app import models, schemas
+from app.database import get_db
+from app.dependencies import get_current_user
+
+router = APIRouter(prefix="/orders", tags=["Замовлення"])
+
+@router.post("/", response_model=schemas.OrderResponse, status_code=status.HTTP_201_CREATED)
+def create_order(
+    order_data: schemas.OrderCreate, 
+    db: Session = Depends(get_db),
+    # Охоронець: сюди пройде тільки той, хто має валідний токен
+    current_user: models.User = Depends(get_current_user) 
+):
+    # 1. Перевіряємо, чи існує постачальник
+    supplier = db.query(models.Supplier).filter(models.Supplier.supplier_id == order_data.supplier_id).first()
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Постачальника з таким ID не знайдено")
+
+    # 2. Створюємо шапку замовлення
+    new_order = models.Order(
+        supplier_id=order_data.supplier_id,
+        status="Draft",
+        total_sum=0  # Початкова сума, можна перерахувати нижче або довірити це тригеру в БД
+    )
+    db.add(new_order)
+    
+    # flush() відправляє SQL-запит в базу, генерує order_id, 
+    # але НЕ робить остаточний commit. Якщо далі буде помилка - все відкотиться.
+    db.flush() 
+
+    calculated_total_sum = 0
+
+    # 3. Додаємо товари до замовлення
+    for item in order_data.items:
+        # Перевіряємо, чи існує товар
+        product = db.query(models.Product).filter(models.Product.product_id == item.product_id).first()
+        if not product:
+            db.rollback() # Скасовуємо створення шапки замовлення
+            raise HTTPException(status_code=404, detail=f"Товар з ID {item.product_id} не знайдено")
+
+        #Рахуємо вартість цього рядка (кількість упаковок * розмір упаковки * ціна)
+        line_sum = item.ord_batches * item.batch_size * item.price_at_ord
+        calculated_total_sum += line_sum
+
+        new_item = models.OrderItem(
+            order_id=new_order.order_id, # Використовуємо ID, який отримали після flush()
+            product_id=item.product_id,
+            sup_article=item.sup_article,
+            ord_batches=item.ord_batches,
+            batch_size=item.batch_size,
+            price_at_ord=item.price_at_ord
+        )
+        db.add(new_item)
+
+    # Записуємо підраховану суму в шапку замовлення ПЕРЕД комітом
+    new_order.total_sum = calculated_total_sum # type: ignore
+
+    # 4. Фіксуємо всі зміни (і шапку, і рядки) в базі даних одним махом
+    db.commit()
+    
+    # Оновлюємо об'єкт із бази, щоб підтягнулися всі зв'язки (relationship 'items')
+    db.refresh(new_order)
+    
+    return new_order
+
+@router.get("/", response_model=list[schemas.OrderResponse])
+def get_all_orders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Повертає список усіх замовлень разом із вкладеними товарами.
+    Доступно тільки для авторизованих користувачів.
+    """
+    # joinedload(models.Order.items) каже алхімії: 
+    # "Одразу зроби JOIN таблиці order_items і підтягни всі рядки"
+    orders = db.query(models.Order).options(joinedload(models.Order.items)).all()
+    return orders
+
+@router.get("/{order_id}", response_model=schemas.OrderResponse)
+def get_order_by_id(
+    order_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Отримати конкретне замовлення за його ID.
+    """
+    order = db.query(models.Order).options(joinedload(models.Order.items)).filter(models.Order.order_id == order_id).first()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Замовлення не знайдено")
+        
+    return order
+
+@router.patch("/{order_id}/status", response_model=schemas.OrderResponse)
+def update_order_status(
+    order_id: int,
+    status_data: schemas.OrderStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Зміна статусу замовлення з урахуванням ролей та правил State Machine.
+    """
+    # 1. Шукаємо замовлення
+    order = db.query(models.Order).filter(models.Order.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Замовлення не знайдено")
+
+    current_status = order.status
+    new_status = status_data.new_status
+    role = current_user.role
+
+    # 2. ГЛОБАЛЬНЕ ПРАВИЛО: Не можна відмінити те, що вже доставлено
+    if current_status == "Delivered" and new_status == "Cancelled": # type: ignore
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Неможливо відмінити замовлення, яке вже доставлено."
+        )
+
+    # 3. ПРАВИЛА ДЛЯ МЕНЕДЖЕРА
+    if role == "Manager": # type: ignore
+        if new_status == "Delivered":
+            raise HTTPException(status_code=403, detail="Менеджер не може відмічати доставку. Це робить постачальник.")
+        
+        # Менеджер підтверджує (Draft -> Confirmed)
+        if new_status == "Confirmed" and current_status != "Draft": # type: ignore
+            raise HTTPException(status_code=400, detail="Підтвердити можна лише замовлення зі статусом Draft.")
+
+    # 4. ПРАВИЛА ДЛЯ ПОСТАЧАЛЬНИКА
+    elif role == "Supplier": # type: ignore
+        if new_status == "Confirmed":
+            raise HTTPException(status_code=403, detail="Постачальник не може підтверджувати нові замовлення. Очікуйте дії менеджера.")
+            
+        # Постачальник доставляє (Confirmed -> Delivered)
+        if new_status == "Delivered" and current_status != "Confirmed": # type: ignore
+            raise HTTPException(status_code=400, detail="Доставити можна лише підтверджене (Confirmed) замовлення.")
+            
+        # (Опціонально) Перевірка: чи це замовлення саме цього постачальника?
+        # Якщо у тебе Suppliers пов'язані з Users через user_id, тут треба дістати 
+        # supplier_id поточного користувача і порівняти з order.supplier_id
+
+    # 5. Якщо всі перевірки пройдені — оновлюємо статус
+    order.status = new_status # type: ignore
+    db.commit()
+    db.refresh(order)
+    
+    return order

@@ -1,0 +1,15 @@
+# Фронтенд
+srm-frontend/node_modules/
+srm-frontend/.next/
+
+# Бекенд
+srm-backend/venv/
+srm-backend/env/
+srm-backend/__pycache__/
+srm-backend/.pytest_cache/
+srm-backend/htmlcov/
+srm-backend/.coverage
+
+# БД та інше
+pgdata/
+.env
