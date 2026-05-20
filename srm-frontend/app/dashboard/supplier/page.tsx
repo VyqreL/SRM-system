@@ -1,11 +1,22 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+// Типи для TypeScript
+interface OrderItem {
+  item_id: number;
+  product_id: number;
+  ord_batches: number;
+  line_total: number;
+}
 
 interface Order {
   order_id: number;
+  supplier_id: number;
   status: string;
   total_sum: number;
   created_at: string;
+  items: OrderItem[];
 }
 
 export default function SupplierDashboard() {
@@ -15,17 +26,20 @@ export default function SupplierDashboard() {
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem('token');
-      // В ідеалі тут має бути ендпоінт, що повертає замовлення ТІЛЬКИ для поточного постачальника
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       if (res.ok) {
         const data = await res.json();
         setOrders(data);
+      } else {
+        console.error('Не вдалося завантажити замовлення');
       }
     } catch (error) {
-      console.error('Помилка завантаження:', error);
+      console.error('Помилка мережі:', error);
     } finally {
       setLoading(false);
     }
@@ -35,89 +49,90 @@ export default function SupplierDashboard() {
     fetchOrders();
   }, []);
 
-  const handleDeliver = (orderId: number) => {
-    // Імітація зміни статусу для скріншоту
-    alert(`Замовлення №${orderId} успішно відмічено як "Доставлене"! Менеджер тепер може прийняти його на склад.`);
-    fetchOrders(); // В реальності тут оновлювався б список після PATCH-запиту
+  const handleStatusChange = async (orderId: number, newStatus: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ new_status: newStatus })
+      });
+      
+      if (res.ok) {
+        fetchOrders();
+      } else {
+        const err = await res.json();
+        alert(`Помилка: ${err.detail}`);
+      }
+    } catch (error) {
+      console.error('Помилка мережі:', error);
+      alert('Помилка мережі');
+    }
   };
 
-  if (loading) return <div className="p-10 text-xl text-center">Завантаження кабінету...</div>;
+  if (loading) return <div className="p-10 text-xl text-center">Завантаження даних...</div>;
 
   return (
-    <div className="min-h-screen p-8 bg-slate-50">
+    <div className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-6xl mx-auto">
-        
-        {/* Шапка кабінету */}
         <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">Кабінет Постачальника</h1>
-            <p className="mt-1 text-sm text-slate-500">Управління продажами та відвантаженнями</p>
-          </div>
-          <div className="flex space-x-4">
-            <button className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-100 rounded shadow-sm hover:bg-indigo-200">
-              ⚙️ Профіль компанії
-            </button>
-            <button className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded shadow hover:bg-indigo-700">
-              📄 Мій прайс-лист
-            </button>
-          </div>
+          <h1 className="text-3xl font-bold text-gray-800">Кабінет Постачальника</h1>
         </div>
 
-        {/* Інформаційна панель (віджет) */}
-        <div className="p-6 mb-8 bg-white border border-l-4 border-indigo-500 rounded-lg shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Ваш поточний рейтинг: <span className="text-indigo-600">4.9 / 5.0</span></h2>
-              <p className="text-sm text-gray-600">Оцінка формується автоматично на основі якості ваших поставок.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Таблиця замовлень */}
-        <div className="overflow-x-auto bg-white rounded-lg shadow-md border border-slate-200">
+        <div className="overflow-x-auto bg-white rounded-lg shadow-md">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-sm text-slate-600 uppercase bg-slate-100 border-b border-slate-200">
-                <th className="px-6 py-4">№ Замовлення</th>
+              <tr className="text-sm text-gray-600 uppercase bg-gray-100 border-b">
+                <th className="px-6 py-4">ID Замовлення</th>
                 <th className="px-6 py-4">Сума (грн)</th>
-                <th className="px-6 py-4">Дата надходження</th>
                 <th className="px-6 py-4">Статус</th>
-                <th className="px-6 py-4 text-center">Дія (Відвантаження)</th>
+                <th className="px-6 py-4">Дата створення</th>
+                <th className="px-6 py-4 text-center">Дії</th>
               </tr>
             </thead>
-            <tbody className="text-sm text-slate-700">
+            <tbody className="text-sm text-gray-700">
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-slate-500">
-                    У вас поки немає нових замовлень.
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                    У вас ще немає замовлень.
                   </td>
                 </tr>
               ) : (
                 orders.map((order) => (
-                  <tr key={order.order_id} className="border-b hover:bg-slate-50 border-slate-100">
+                  <tr key={order.order_id} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium">#{order.order_id}</td>
-                    <td className="px-6 py-4 font-bold text-indigo-600">{Number(order.total_sum).toFixed(2)}</td>
-                    <td className="px-6 py-4">{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 font-bold text-blue-600">{Number(order.total_sum).toFixed(2)}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 text-xs font-semibold rounded-full 
-                        ${order.status === 'Confirmed' ? 'bg-amber-100 text-amber-800' : 
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full 
+                        ${order.status === 'Draft' ? 'bg-gray-200 text-gray-800' : 
+                          order.status === 'Confirmed' ? 'bg-blue-100 text-blue-800' : 
+                          order.status === 'Sent' ? 'bg-purple-100 text-purple-800' : 
                           order.status === 'Delivered' ? 'bg-green-100 text-green-800' : 
-                          'bg-slate-100 text-slate-800'}`}>
-                        {order.status === 'Confirmed' ? 'Очікує відправки' : order.status}
+                          'bg-red-100 text-red-800'}`}>
+                        {order.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      {order.status === 'Confirmed' ? (
+                    <td className="px-6 py-4">{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-center space-x-2">
+                      {order.status === 'Confirmed' && (
                         <button 
-                          onClick={() => handleDeliver(order.order_id)}
-                          className="px-4 py-1.5 text-white bg-amber-500 rounded hover:bg-amber-600 transition shadow-sm"
+                          onClick={() => handleStatusChange(order.order_id, 'Sent')}
+                          className="px-3 py-1 text-white bg-purple-500 rounded hover:bg-purple-600 transition"
                         >
-                          🚚 Відправити
+                          Відправити замовлення
                         </button>
-                      ) : order.status === 'Delivered' ? (
-                        <span className="text-green-600 font-medium">✓ Відвантажено</span>
-                      ) : (
-                        <span className="text-slate-400 italic">Недоступно</span>
+                      )}
+                      {order.status === 'Sent' && (
+                        <span className="text-gray-400 italic">В дорозі</span>
+                      )}
+                      {order.status === 'Delivered' && (
+                        <span className="text-green-600 font-semibold">Доставлено</span>
+                      )}
+                      {order.status === 'Draft' && (
+                        <span className="text-gray-400 italic">На етапі створення</span>
                       )}
                     </td>
                   </tr>

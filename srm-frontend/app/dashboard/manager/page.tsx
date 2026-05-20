@@ -50,15 +50,29 @@ export default function ManagerDashboard() {
     fetchOrders();
   }, []);
 
-  // Функція для зміни статусу (для скріншотів можна просто оновлювати UI або слати реальний запит)
-  const handleConfirm = async (orderId: number) => {
-    // В реальному житті тут був би PATCH запит
-    alert(`Замовлення №${orderId} підтверджено! Спрацювала процедура proc_confirm_order.`);
-    fetchOrders(); // Оновлюємо список
-  };
-
-  const handleReceive = (orderId: number) => {
-    alert(`Відкрито форму прийомки на склад для замовлення №${orderId}. Після цього можна буде виставити оцінку!`);
+  // Функція для зміни статусу (реальний PATCH запит на бекенд)
+  const handleStatusChange = async (orderId: number, newStatus: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ new_status: newStatus })
+      });
+      
+      if (res.ok) {
+        fetchOrders(); // Оновлюємо список після успішної зміни
+      } else {
+        const err = await res.json();
+        alert(`Помилка: ${err.detail}`);
+      }
+    } catch (error) {
+      console.error('Помилка мережі:', error);
+      alert('Помилка мережі');
+    }
   };
 
   if (loading) return <div className="p-10 text-xl text-center">Завантаження даних...</div>;
@@ -107,6 +121,7 @@ export default function ManagerDashboard() {
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full 
                         ${order.status === 'Draft' ? 'bg-gray-200 text-gray-800' : 
                           order.status === 'Confirmed' ? 'bg-blue-100 text-blue-800' : 
+                          order.status === 'Sent' ? 'bg-purple-100 text-purple-800' : 
                           order.status === 'Delivered' ? 'bg-green-100 text-green-800' : 
                           'bg-red-100 text-red-800'}`}>
                         {order.status}
@@ -116,22 +131,25 @@ export default function ManagerDashboard() {
                     <td className="px-6 py-4 text-center space-x-2">
                       {order.status === 'Draft' && (
                         <button 
-                          onClick={() => handleConfirm(order.order_id)}
+                          onClick={() => handleStatusChange(order.order_id, 'Confirmed')}
                           className="px-3 py-1 text-white bg-blue-500 rounded hover:bg-blue-600 transition"
                         >
                           Підтвердити
                         </button>
                       )}
-                      {order.status === 'Delivered' && (
+                      {order.status === 'Sent' && (
                         <button 
-                          onClick={() => handleReceive(order.order_id)}
+                          onClick={() => handleStatusChange(order.order_id, 'Delivered')}
                           className="px-3 py-1 text-white bg-purple-500 rounded hover:bg-purple-600 transition"
                         >
                           Прийняти на склад
                         </button>
                       )}
                       {(order.status === 'Confirmed') && (
-                        <span className="text-gray-400 italic">Очікується доставка</span>
+                        <span className="text-gray-400 italic">Очікується відправка</span>
+                      )}
+                      {(order.status === 'Delivered') && (
+                        <span className="text-green-600 font-semibold">Доставлено</span>
                       )}
                     </td>
                   </tr>
