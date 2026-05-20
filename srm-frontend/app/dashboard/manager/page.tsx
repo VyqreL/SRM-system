@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 // Типи для TypeScript
 interface OrderItem {
@@ -25,7 +26,7 @@ export default function ManagerDashboard() {
   // Завантаження замовлень з бекенду
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('token');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -67,9 +68,14 @@ export default function ManagerDashboard() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-800">Кабінет Менеджера (Закупника)</h1>
-          <button className="px-4 py-2 text-white bg-green-600 rounded shadow hover:bg-green-700">
-            + Створити нове замовлення
-          </button>
+          <div className="flex space-x-4">
+            <Link href="/dashboard/manager/reorder-suggestions" className="px-4 py-2 text-white bg-blue-600 rounded shadow hover:bg-blue-700 transition">
+              📊 Дашборд дефіциту
+            </Link>
+            <button className="px-4 py-2 text-white bg-green-600 rounded shadow hover:bg-green-700 transition">
+              + Створити нове замовлення
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto bg-white rounded-lg shadow-md">

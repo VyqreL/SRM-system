@@ -38,7 +38,7 @@ export default function ReorderSuggestionsPage() {
   const fetchReorderSuggestions = async () => {
     // ... (код завантаження даних залишається без змін)
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('token');
       if (!token) {
         setError('Необхідна авторизація.');
         setLoading(false);
@@ -121,7 +121,7 @@ export default function ReorderSuggestionsPage() {
     });
 
     // Відправляємо запити на створення замовлень
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     const creationPromises = Array.from(ordersBySupplier.entries()).map(([supplierId, items]) => {
       return fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
         method: 'POST',
