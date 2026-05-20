@@ -86,9 +86,9 @@ export default function ManagerDashboard() {
             <Link href="/dashboard/manager/reorder-suggestions" className="px-4 py-2 text-white bg-blue-600 rounded shadow hover:bg-blue-700 transition">
               📊 Дашборд дефіциту
             </Link>
-            <button className="px-4 py-2 text-white bg-green-600 rounded shadow hover:bg-green-700 transition">
+            <Link href="/dashboard/manager/create-order" className="px-4 py-2 text-white bg-green-600 rounded shadow hover:bg-green-700 transition">
               + Створити нове замовлення
-            </button>
+            </Link>
           </div>
         </div>
 

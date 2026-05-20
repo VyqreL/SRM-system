@@ -51,6 +51,10 @@ class SupplierResponse(ORMBase):
     edrpou: str
     rating: Decimal
 
+class SupplierShortResponse(ORMBase):
+    supplier_id: int
+    company_name: str
+
 # --- Схеми для Профілю Постачальника (Кабінет) ---
 class SupplierProfileCreate(BaseModel):
     company_name: str = Field(..., description="Назва компанії")
@@ -81,6 +85,13 @@ class ProductResponse(ORMBase):
     internal_sku: str
     name: str
     unit: str
+
+class ProductForOrderCreation(ORMBase):
+    product_id: int
+    name: str
+    wh_price: Decimal
+    batch_size: Decimal
+    moq_batches: int
 
 
 # ==========================================

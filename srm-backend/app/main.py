@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.database import engine, Base
-from app.routers import auth, users, orders, business, prices
+from app.routers import auth, users, orders, business, prices, suppliers
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -26,6 +26,7 @@ app.include_router(users.router)
 app.include_router(orders.router)
 app.include_router(business.router)
 app.include_router(prices.router)
+app.include_router(suppliers.router)
 
 @app.get("/")
 async def root():
