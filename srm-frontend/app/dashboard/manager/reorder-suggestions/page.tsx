@@ -45,7 +45,7 @@ export default function ReorderSuggestionsPage() {
         return;
       }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/business/suggestions/reorder`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suggestions/reorder`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
