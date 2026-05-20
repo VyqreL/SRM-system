@@ -42,39 +42,43 @@ export default function ReorderSuggestionsPage() {
   }>({ isLoading: false, error: null, success: null });
 
   useEffect(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Необхідна авторизація.');
-        setLoading(false);
-        return;
-      }
+    const fetchReorderSuggestions = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Необхідна авторизація.');
+          setLoading(false);
+          return;
+        }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suggestions/reorder`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (res.ok) {
-        const data: ReorderSuggestion[] = await res.json();
-        setSuggestions(data);
-        // Ініціалізуємо рекомендовану кількість для замовлення
-        const initialQuantities: { [key: string]: string } = {};
-        data.forEach(item => {
-          const key = `${item.product_id}-${item.supplier_id}`;
-          const quantityToOrder = Math.max(0, item.reorder_point - item.current_stocks);
-          const batchSize = item.batch_size; 
-          initialQuantities[key] = String(Math.ceil(quantityToOrder / batchSize));
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suggestions/reorder`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-        setOrderQuantities(initialQuantities);
-      } else {
-        const errorData = await res.json();
-        setError(errorData.detail || 'Не вдалося завантажити пропозиції.');
+        
+        if (res.ok) {
+          const data: ReorderSuggestion[] = await res.json();
+          setSuggestions(data);
+          // Ініціалізуємо рекомендовану кількість для замовлення
+          const initialQuantities: { [key: string]: string } = {};
+          data.forEach(item => {
+            const key = `${item.product_id}-${item.supplier_id}`;
+            const quantityToOrder = Math.max(0, item.reorder_point - item.current_stocks);
+            const batchSize = item.batch_size; 
+            initialQuantities[key] = String(Math.ceil(quantityToOrder / batchSize));
+          });
+          setOrderQuantities(initialQuantities);
+        } else {
+          const errorData = await res.json();
+          setError(errorData.detail || 'Не вдалося завантажити пропозиції.');
+        }
+      } catch (err) {
+        setError('Помилка мережі або сервера.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Помилка мережі або сервера.');
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    fetchReorderSuggestions();
   }, []);
 
   const handleSelectItem = (productId: number, itemKey: string) => {
