@@ -94,12 +94,32 @@ export default function ReorderSuggestionsPage() {
   const handleQuantityChange = (itemKey: string, value: string) => {
     setOrderQuantities(prev => ({ ...prev, [itemKey]: value }));
   };
+
+  const handleQuantityBlur = (itemKey: string, moq: number) => {
+    const currentQty = parseInt(orderQuantities[itemKey] || '0', 10);
+    
+    // Якщо значення некоректне або менше за MOQ, автоматично встановлюємо MOQ
+    if (isNaN(currentQty) || currentQty < moq) {
+      setOrderQuantities(prev => ({ ...prev, [itemKey]: String(moq) }));
+    }
+  };
+
   const handleCreateOrders = async () => {
     if (selectedItems.size === 0) {
       setSubmissionStatus({ isLoading: false, error: 'Не обрано жодної позиції для замовлення.', success: null });
       return;
     }
     setSubmissionStatus({ isLoading: true, error: null, success: null });
+
+    // Додаткова валідація перед відправкою
+    for (const key of selectedItems.values()) {
+      const suggestion = suggestions.find(s => `${s.product_id}-${s.supplier_id}` === key);
+      const quantity = parseInt(orderQuantities[key] || '0', 10);
+      if (suggestion && quantity < suggestion.moq_batches) {
+        setSubmissionStatus({ isLoading: false, error: `Кількість для товару "${suggestion.name}" (${quantity}) менша за MOQ (${suggestion.moq_batches}). Будь ласка, виправте.`, success: null });
+        return;
+      }
+    }
 
     // Групуємо обрані товари за постачальником
     const ordersBySupplier = new Map<number, OrderItemPayload[]>();
@@ -218,7 +238,13 @@ export default function ReorderSuggestionsPage() {
                             <td className="px-4 py-2 font-medium text-gray-800">{offer.company_name}</td>
                             <td className="px-4 py-2 font-bold text-gray-900">{Number(offer.wh_price).toFixed(2)}</td>
                             <td className="px-4 py-2">
-                              <input type="number" min={offer.moq_batches} value={orderQuantities[key] || ''} onChange={(e) => handleQuantityChange(key, e.target.value)} className="w-full p-2 border rounded" disabled={!isSelected} />
+                              <input 
+                                type="number" 
+                                min={offer.moq_batches} 
+                                value={orderQuantities[key] || ''} 
+                                onChange={(e) => handleQuantityChange(key, e.target.value)} 
+                                onBlur={() => handleQuantityBlur(key, offer.moq_batches)}
+                                className="w-full p-2 border rounded disabled:bg-gray-100" disabled={!isSelected} />
                             </td>
                           </tr>
                         );
