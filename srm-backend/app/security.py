@@ -1,5 +1,5 @@
-from passlib.context import CryptContext
 import secrets
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from app.config import settings
@@ -9,16 +9,19 @@ ALGORITHM = "HS256"
 # Час життя токена (для MVP зробимо 24 години, щоб не доводилось постійно логінитись)
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-# Налаштування контексту для хешування паролів
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def get_password_hash(password: str) -> str:
     """Генерує безпечний хеш пароля"""
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Перевіряє, чи збігається пароль із хешем у базі"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except ValueError:
+        # Якщо хеш в базі невалідного формату (наприклад !INVITED_NO_PASSWORD)
+        return False
 
 def generate_invite_token() -> str:
     """Генерує випадковий 32-символьний токен для запрошення"""

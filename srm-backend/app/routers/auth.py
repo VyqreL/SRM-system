@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas, security
 from app.database import get_db
 from fastapi.security import OAuth2PasswordRequestForm
+from app.dependencies import get_current_user
 from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Автентифікація та Реєстрація"])
@@ -35,9 +36,13 @@ def register_supplier(user_data: schemas.UserCreate, db: Session = Depends(get_d
 # 2. ГЕНЕРАЦІЯ ЗАПРОШЕННЯ (Для Менеджерів)
 # ---------------------------------------------------------
 @router.post("/invite/manager")
-def invite_manager(invite_data: schemas.ManagerInviteCreate, db: Session = Depends(get_db)):
-    # У майбутньому тут буде перевірка, що цей запит робить ADMIN. 
-    # Поки що залишаємо відкритим для тестування.
+def invite_manager(
+    invite_data: schemas.ManagerInviteCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Тільки адміністратор може генерувати запрошення для менеджерів")
     
     existing_user = db.query(models.User).filter(models.User.email == invite_data.email).first()
     if existing_user:

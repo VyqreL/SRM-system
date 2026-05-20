@@ -86,6 +86,15 @@ class PriceList(Base):
     moq_batches = Column(Integer, default=1)
     batch_size = Column(Numeric(12,3), default=1)
 
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+    history_id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"))
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+    old_price = Column(Numeric(12, 2), nullable=False)
+    new_price = Column(Numeric(12, 2), nullable=False)
+    change_date = Column(DateTime, server_default=func.now())
+
 class PerformanceRecord(Base):
     __tablename__ = "performance_records"
     record_id = Column(Integer, primary_key=True, index=True)

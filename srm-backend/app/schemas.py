@@ -153,6 +153,22 @@ class PriceListResponse(PriceListCreate):
     class Config:
         from_attributes = True
 
+class PriceListUpdate(BaseModel):
+    wh_price: Decimal = Field(..., description="Нова ціна")
+    moq_batches: Optional[int] = None
+    batch_size: Optional[Decimal] = None
+
+class PriceHistoryResponse(BaseModel):
+    history_id: int
+    supplier_id: int
+    product_id: int
+    old_price: Decimal
+    new_price: Decimal
+    change_date: datetime
+    
+    class Config:
+        from_attributes = True
+
 # --- Схеми для Оцінки ефективності ---
 class PerformanceCreate(BaseModel):
     batch_id: int
