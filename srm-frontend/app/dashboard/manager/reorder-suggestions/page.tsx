@@ -152,7 +152,7 @@ export default function ReorderSuggestionsPage() {
   if (error) return <div className="p-10 text-xl text-center text-red-600">Помилка: {error}</div>;
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50">
+    <div className="p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-4">
           <Link href="/dashboard/manager" className="text-blue-600 hover:text-blue-800 transition flex items-center gap-2 w-max">

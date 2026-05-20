@@ -76,7 +76,7 @@ export default function SupplierDashboard() {
   if (loading) return <div className="p-10 text-xl text-center">Завантаження даних...</div>;
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50">
+    <div className="p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-800">Кабінет Постачальника</h1>
