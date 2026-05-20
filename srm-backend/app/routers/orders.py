@@ -13,7 +13,11 @@ def create_order(
     # Охоронець: сюди пройде тільки той, хто має валідний токен
     current_user: models.User = Depends(get_current_user) 
 ):
-    # 1. Перевіряємо, чи існує постачальник
+    # 0. Перевірка ролі: тільки менеджер може створювати замовлення
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Тільки менеджер може створювати нові замовлення.")
+
+    # 1. Перевіряємо, чи існує постачальник, якому створюється замовлення
     supplier = db.query(models.Supplier).filter(models.Supplier.supplier_id == order_data.supplier_id).first()
     if not supplier:
         raise HTTPException(status_code=404, detail="Постачальника з таким ID не знайдено")
@@ -21,6 +25,7 @@ def create_order(
     # 2. Створюємо шапку замовлення
     new_order = models.Order(
         supplier_id=order_data.supplier_id,
+        # Всі нові замовлення створюються в статусі "Чернетка"
         status="Draft",
         total_sum=0  # Початкова сума, можна перерахувати нижче або довірити це тригеру в БД
     )
@@ -71,12 +76,28 @@ def get_all_orders(
     current_user: models.User = Depends(get_current_user)
 ):
     """
-    Повертає список усіх замовлень разом із вкладеними товарами.
-    Доступно тільки для авторизованих користувачів.
+    Повертає список замовлень.
+    - Менеджер бачить усі замовлення.
+    - Постачальник бачить тільки свої замовлення.
     """
     # joinedload(models.Order.items) каже алхімії: 
     # "Одразу зроби JOIN таблиці order_items і підтягни всі рядки"
-    orders = db.query(models.Order).options(joinedload(models.Order.items)).all()
+    query = db.query(models.Order).options(joinedload(models.Order.items)).order_by(models.Order.order_id.desc())
+    
+    if current_user.role == "MANAGER":
+        # Менеджер бачить все
+        orders = query.all()
+    elif current_user.role == "SUPPLIER":
+        # Постачальник бачить тільки свої
+        supplier_profile = db.query(models.Supplier).filter(models.Supplier.user_id == current_user.user_id).first()
+        if not supplier_profile:
+            # Постачальник без профілю не має замовлень
+            return []
+        orders = query.filter(models.Order.supplier_id == supplier_profile.supplier_id).all()
+    else:
+        # Інші ролі (напр. ADMIN) не бачать замовлень за замовчуванням
+        return []
+        
     return orders
 
 @router.get("/{order_id}", response_model=schemas.OrderResponse)
@@ -87,11 +108,20 @@ def get_order_by_id(
 ):
     """
     Отримати конкретне замовлення за його ID.
+    Менеджер бачить будь-яке замовлення.
+    Постачальник - тільки своє.
     """
     order = db.query(models.Order).options(joinedload(models.Order.items)).filter(models.Order.order_id == order_id).first()
     
     if not order:
         raise HTTPException(status_code=404, detail="Замовлення не знайдено")
+        
+    if current_user.role == "SUPPLIER":
+        supplier_profile = db.query(models.Supplier).filter(models.Supplier.user_id == current_user.user_id).first()
+        if not supplier_profile or order.supplier_id != supplier_profile.supplier_id:
+            raise HTTPException(status_code=403, detail="Ви не маєте доступу до цього замовлення.")
+            
+    # Менеджер має доступ до всіх замовлень, тому додаткова перевірка не потрібна
         
     return order
 
