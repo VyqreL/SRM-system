@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 
 // Типи для TypeScript
 interface ReorderSuggestion {
@@ -153,6 +154,11 @@ export default function ReorderSuggestionsPage() {
   return (
     <div className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-4">
+          <Link href="/dashboard/manager" className="text-blue-600 hover:text-blue-800 transition flex items-center gap-2 w-max">
+            <span>&larr;</span> Повернутися до кабінету
+          </Link>
+        </div>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Дефіцит товарів</h1>
           <button 
