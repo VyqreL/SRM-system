@@ -113,37 +113,42 @@ def update_order_status(
     current_status = order.status
     new_status = status_data.new_status
     role = current_user.role
+    
+    # 2. Визначаємо дозволені переходи для кожної ролі
+    allowed_transitions = {
+        "MANAGER": {
+            "Draft": ["Confirmed", "Cancelled"],
+            "Sent": ["Delivered"] # Менеджер підтверджує доставку
+        },
+        "SUPPLIER": {
+            "Confirmed": ["Sent", "Cancelled"] # Постачальник відправляє замовлення
+        }
+    }
 
-    # 2. ГЛОБАЛЬНЕ ПРАВИЛО: Не можна відмінити те, що вже доставлено
-    if current_status == "Delivered" and new_status == "Cancelled": # type: ignore
+    # 3. Перевіряємо, чи може поточна роль взагалі змінювати поточний статус
+    if role not in allowed_transitions or current_status not in allowed_transitions[role]: # type: ignore
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Неможливо відмінити замовлення, яке вже доставлено."
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Користувач з роллю '{role}' не може змінювати замовлення зі статусом '{current_status}'."
         )
 
-    # 3. ПРАВИЛА ДЛЯ МЕНЕДЖЕРА
-    if role == "Manager": # type: ignore
-        if new_status == "Delivered":
-            raise HTTPException(status_code=403, detail="Менеджер не може відмічати доставку. Це робить постачальник.")
-        
-        # Менеджер підтверджує (Draft -> Confirmed)
-        if new_status == "Confirmed" and current_status != "Draft": # type: ignore
-            raise HTTPException(status_code=400, detail="Підтвердити можна лише замовлення зі статусом Draft.")
+    # 4. Перевіряємо, чи є новий статус у списку дозволених переходів
+    if new_status not in allowed_transitions[role][current_status]: # type: ignore
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Неприпустимий перехід зі статусу '{current_status}' до '{new_status}' для ролі '{role}'."
+        )
 
-    # 4. ПРАВИЛА ДЛЯ ПОСТАЧАЛЬНИКА
-    elif role == "Supplier": # type: ignore
-        if new_status == "Confirmed":
-            raise HTTPException(status_code=403, detail="Постачальник не може підтверджувати нові замовлення. Очікуйте дії менеджера.")
-            
-        # Постачальник доставляє (Confirmed -> Delivered)
-        if new_status == "Delivered" and current_status != "Confirmed": # type: ignore
-            raise HTTPException(status_code=400, detail="Доставити можна лише підтверджене (Confirmed) замовлення.")
-            
-        # (Опціонально) Перевірка: чи це замовлення саме цього постачальника?
-        # Якщо у тебе Suppliers пов'язані з Users через user_id, тут треба дістати 
-        # supplier_id поточного користувача і порівняти з order.supplier_id
+    # 5. Додаткова перевірка для постачальника: чи це його замовлення?
+    if role == "SUPPLIER":
+        supplier_profile = db.query(models.Supplier).filter(models.Supplier.user_id == current_user.user_id).first()
+        if not supplier_profile or order.supplier_id != supplier_profile.supplier_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Ви можете керувати лише власними замовленнями."
+            )
 
-    # 5. Якщо всі перевірки пройдені — оновлюємо статус
+    # 6. Якщо всі перевірки пройдені — оновлюємо статус
     order.status = new_status # type: ignore
     db.commit()
     db.refresh(order)

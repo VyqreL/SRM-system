@@ -201,3 +201,16 @@ class BatchResponse(BatchCreate):
     
     class Config:
         from_attributes = True
+
+# --- Схеми для Дефіциту (Reorder Suggestions) ---
+class ReorderSuggestionResponse(BaseModel):
+    product_id: int
+    name: str
+    current_stocks: Decimal
+    reorder_point: Decimal
+    supplier_id: int
+    company_name: str
+    wh_price: Decimal
+    
+    class Config:
+        from_attributes = True

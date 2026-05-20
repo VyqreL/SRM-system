@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from typing import List
 from datetime import timedelta
 from app import models, schemas
 from app.database import get_db
@@ -91,3 +93,16 @@ def receive_product_batch(
     db.refresh(new_batch)
     
     return new_batch
+
+@router.get("/suggestions/reorder", response_model=List[schemas.ReorderSuggestionResponse])
+def get_reorder_suggestions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримання списку товарів, які потребують замовлення (дефіцит). Доступно тільки менеджерам."""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Тільки менеджер має доступ до дашборду дефіциту")
+
+    # Використовуємо існуючу VIEW у базі даних за допомогою "text"
+    suggestions = db.execute(text("SELECT * FROM view_reorder_suggestions")).mappings().all()
+    return suggestions
