@@ -119,11 +119,7 @@ export default function ManagerDashboard() {
               ) : (
                 orders.map((order) => (
                   <tr key={order.order_id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium">
-                      <Link href={`/dashboard/orders/${order.order_id}`} className="text-blue-600 hover:underline">
-                        #{order.order_id}
-                      </Link>
-                    </td>
+                    <td className="px-6 py-4 font-medium">#{order.order_id}</td>
                     <td className="px-6 py-4">{order.supplier.company_name}</td>
                     <td className="px-6 py-4 font-bold text-blue-600">{Number(order.total_sum).toFixed(2)}</td>
                     <td className="px-6 py-4">
@@ -138,6 +134,9 @@ export default function ManagerDashboard() {
                     </td>
                     <td className="px-6 py-4">{new Date(order.created_at).toLocaleDateString()}</td>
                     <td className="px-6 py-4 text-center space-x-2">
+                      <Link href={`/dashboard/orders/${order.order_id}`} className="inline-block p-2 text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition" title="Переглянути замовлення">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      </Link>
                       {order.status === 'Draft' && (
                         <button 
                           onClick={() => handleStatusChange(order.order_id, 'Confirmed')}
