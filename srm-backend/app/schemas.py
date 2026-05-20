@@ -201,4 +201,6 @@ class ReorderSuggestionResponse(BaseModel):
     supplier_id: int
     company_name: str
     wh_price: Decimal
+    batch_size: Decimal
+    moq_batches: int
     model_config = ConfigDict(from_attributes=True)

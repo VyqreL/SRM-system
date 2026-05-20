@@ -25,7 +25,7 @@ export default function ManagerDashboard() {
   // Завантаження замовлень з бекенду
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
         headers: {
           'Authorization': `Bearer ${token}`
