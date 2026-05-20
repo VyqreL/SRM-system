@@ -13,6 +13,7 @@ interface OrderItem {
 interface SupplierShort {
   supplier_id: number;
   company_name: string;
+  rating: number;
 }
 
 interface Order {
@@ -120,7 +121,12 @@ export default function ManagerDashboard() {
                 orders.map((order) => (
                   <tr key={order.order_id} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium">#{order.order_id}</td>
-                    <td className="px-6 py-4">{order.supplier.company_name}</td>
+                    <td className="px-6 py-4">
+                      {order.supplier.company_name}
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Рейтинг постачальника">
+                        ⭐ {Number(order.supplier.rating).toFixed(2)}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 font-bold text-blue-600">{Number(order.total_sum).toFixed(2)}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full 

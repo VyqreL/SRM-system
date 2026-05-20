@@ -84,7 +84,8 @@ def get_all_orders(
     # "Одразу зроби JOIN таблиці order_items і підтягни всі рядки"
     query = db.query(models.Order).options(
         joinedload(models.Order.supplier),
-        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+        joinedload(models.Order.items).joinedload(models.OrderItem.product),
+        joinedload(models.Order.batches)
     ).order_by(models.Order.order_id.desc())
     
     if current_user.role == "MANAGER":
@@ -116,7 +117,8 @@ def get_order_by_id(
     """
     order = db.query(models.Order).options(
         joinedload(models.Order.supplier),
-        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+        joinedload(models.Order.items).joinedload(models.OrderItem.product),
+        joinedload(models.Order.batches)
     ).filter(models.Order.order_id == order_id).first()
     
     if not order:

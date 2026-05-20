@@ -54,6 +54,7 @@ class SupplierResponse(ORMBase):
 class SupplierShortResponse(ORMBase):
     supplier_id: int
     company_name: str
+    rating: Decimal
 
 # --- Схеми для Профілю Постачальника (Кабінет) ---
 class SupplierProfileCreate(BaseModel):
@@ -121,6 +122,20 @@ class OrderItemResponse(ORMBase):
     line_total: Optional[Decimal] = None
     product: ProductShortResponse
 
+# --- Схеми для Партій товару (Прийомка на склад) ---
+class BatchCreate(BaseModel):
+    product_id: int
+    order_id: int
+    prod_date: date
+    exp_date: date
+    curr_qty: Decimal = Field(..., description="Фактична кількість прийнятого товару")
+
+class BatchResponse(BatchCreate):
+    batch_id: int
+    arrival_date: datetime
+    status: str
+    model_config = ConfigDict(from_attributes=True)
+
 class OrderCreate(BaseModel):
     supplier_id: int
     items: List[OrderItemCreate] # Замовлення одразу приймає список товарів!
@@ -132,6 +147,7 @@ class OrderResponse(ORMBase):
     created_at: datetime
     items: List[OrderItemResponse] = [] # Автоматично підтягне всі рядки замовлення
     supplier: SupplierShortResponse
+    batches: List[BatchResponse] = []
 
 class OrderStatusUpdate(BaseModel):
     new_status: str = Field(..., description="Новий статус: Confirmed, Delivered або Cancelled")
@@ -193,20 +209,6 @@ class PerformanceResponse(BaseModel):
     total_score: Decimal
     model_config = ConfigDict(from_attributes=True)
 
-
-# --- Схеми для Партій товару (Прийомка на склад) ---
-class BatchCreate(BaseModel):
-    product_id: int
-    order_id: int
-    prod_date: date
-    exp_date: date
-    curr_qty: Decimal = Field(..., description="Фактична кількість прийнятого товару")
-
-class BatchResponse(BatchCreate):
-    batch_id: int
-    arrival_date: datetime
-    status: str
-    model_config = ConfigDict(from_attributes=True)
 
 # --- Схеми для Дефіциту (Reorder Suggestions) ---
 class ReorderSuggestionResponse(BaseModel):

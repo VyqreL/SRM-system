@@ -59,6 +59,7 @@ class Order(Base):
 
     supplier = relationship("Supplier", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    batches = relationship("ProductBatch", back_populates="order")
 
 
 class OrderItem(Base):
@@ -116,3 +117,5 @@ class ProductBatch(Base):
     exp_date = Column(Date, nullable=False)
     curr_qty = Column(Numeric(12,3), nullable=False)
     status = Column(String(20), default="Active")
+
+    order = relationship("Order", back_populates="batches")
