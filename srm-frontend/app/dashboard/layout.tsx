@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 interface UserProfile {
@@ -10,12 +10,30 @@ interface UserProfile {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
-      router.push('/login');
+      router.replace('/login');
+      return;
+    }
+
+    // Функція для перевірки ролей та редиректів
+    const enforceRBAC = (role: string) => {
+      if (pathname === '/dashboard' || pathname === '/dashboard/') {
+        router.replace(role === 'SUPPLIER' ? '/dashboard/supplier' : '/dashboard/manager');
+      } else if (role === 'SUPPLIER' && pathname.startsWith('/dashboard/manager')) {
+        router.replace('/dashboard/supplier');
+      } else if (role === 'MANAGER' && pathname.startsWith('/dashboard/supplier')) {
+        router.replace('/dashboard/manager');
+      }
+    };
+
+    // Якщо профіль вже є в стейті, просто перевіряємо маршрут при навігації
+    if (user) {
+      enforceRBAC(user.role);
       return;
     }
 
@@ -27,16 +45,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (res.ok) return res.json();
         throw new Error('Unauthorized');
       })
-      .then(data => setUser(data))
+      .then(data => {
+        setUser(data);
+        enforceRBAC(data.role);
+      })
       .catch(() => {
         localStorage.removeItem('token');
-        router.push('/login');
+        router.replace('/login');
       });
-  }, [router]);
+  }, [router, pathname, user]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    router.push('/login');
+    router.replace('/login');
   };
 
   if (!user) return <div className="flex items-center justify-center min-h-screen bg-gray-50">Завантаження профілю...</div>;
@@ -46,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Загальний Header */}
       <header className="flex items-center justify-between px-8 py-4 bg-white border-b shadow-sm">
         <div className="text-2xl font-black text-blue-700">
-          <Link href="/dashboard/manager">SRM System</Link>
+          <Link href="/dashboard">SRM System</Link>
         </div>
         <div className="flex items-center gap-6">
           <Link href="/dashboard/profile" className="flex flex-col text-right transition rounded hover:bg-gray-50 p-1 px-2 cursor-pointer">
