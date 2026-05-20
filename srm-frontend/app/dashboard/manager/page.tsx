@@ -10,13 +10,18 @@ interface OrderItem {
   line_total: number;
 }
 
+interface SupplierShort {
+  supplier_id: number;
+  company_name: string;
+}
+
 interface Order {
   order_id: number;
-  supplier_id: number;
   status: string;
   total_sum: number;
   created_at: string;
   items: OrderItem[];
+  supplier: SupplierShort;
 }
 
 export default function ManagerDashboard() {
@@ -97,7 +102,7 @@ export default function ManagerDashboard() {
             <thead>
               <tr className="text-sm text-gray-600 uppercase bg-gray-100 border-b">
                 <th className="px-6 py-4">ID Замовлення</th>
-                <th className="px-6 py-4">ID Постачальника</th>
+                <th className="px-6 py-4">Постачальник</th>
                 <th className="px-6 py-4">Сума (грн)</th>
                 <th className="px-6 py-4">Статус</th>
                 <th className="px-6 py-4">Дата створення</th>
@@ -114,8 +119,12 @@ export default function ManagerDashboard() {
               ) : (
                 orders.map((order) => (
                   <tr key={order.order_id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium">#{order.order_id}</td>
-                    <td className="px-6 py-4">{order.supplier_id}</td>
+                    <td className="px-6 py-4 font-medium">
+                      <Link href={`/dashboard/orders/${order.order_id}`} className="text-blue-600 hover:underline">
+                        #{order.order_id}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4">{order.supplier.company_name}</td>
                     <td className="px-6 py-4 font-bold text-blue-600">{Number(order.total_sum).toFixed(2)}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full 

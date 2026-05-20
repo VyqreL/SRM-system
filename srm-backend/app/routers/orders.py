@@ -82,7 +82,10 @@ def get_all_orders(
     """
     # joinedload(models.Order.items) каже алхімії: 
     # "Одразу зроби JOIN таблиці order_items і підтягни всі рядки"
-    query = db.query(models.Order).options(joinedload(models.Order.items)).order_by(models.Order.order_id.desc())
+    query = db.query(models.Order).options(
+        joinedload(models.Order.supplier),
+        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+    ).order_by(models.Order.order_id.desc())
     
     if current_user.role == "MANAGER":
         # Менеджер бачить все
@@ -111,7 +114,10 @@ def get_order_by_id(
     Менеджер бачить будь-яке замовлення.
     Постачальник - тільки своє.
     """
-    order = db.query(models.Order).options(joinedload(models.Order.items)).filter(models.Order.order_id == order_id).first()
+    order = db.query(models.Order).options(
+        joinedload(models.Order.supplier),
+        joinedload(models.Order.items).joinedload(models.OrderItem.product)
+    ).filter(models.Order.order_id == order_id).first()
     
     if not order:
         raise HTTPException(status_code=404, detail="Замовлення не знайдено")

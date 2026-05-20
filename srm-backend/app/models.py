@@ -27,6 +27,7 @@ class Product(Base):
     internal_sku = Column(String(50), unique=True, nullable=False)
     name = Column(String(255), nullable=False)
     unit = Column(String(10), nullable=False)
+    order_items = relationship("OrderItem", back_populates="product")
 
 
 # Блок 3: Контрагенти (Постачальники)
@@ -75,6 +76,7 @@ class OrderItem(Base):
     line_total = Column(Numeric(15, 2), server_default=FetchedValue())
 
     order = relationship("Order", back_populates="items")
+    product = relationship("Product", back_populates="order_items")
 
 class PriceList(Base):
     __tablename__ = "price_lists"

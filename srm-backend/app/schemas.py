@@ -86,6 +86,11 @@ class ProductResponse(ORMBase):
     name: str
     unit: str
 
+class ProductShortResponse(ORMBase):
+    product_id: int
+    name: str
+    internal_sku: str
+
 class ProductForOrderCreation(ORMBase):
     product_id: int
     name: str
@@ -107,15 +112,14 @@ class OrderItemCreate(BaseModel):
 class OrderItemResponse(ORMBase):
     item_id: int
     order_id: int
-    product_id: int
     sup_article: Optional[str] = None
     ord_batches: int
     batch_size: int
     price_at_ord: Decimal
-    
     # Робимо ці поля необов'язковими, щоб Pydantic не панікував
     total_units: Optional[int] = None
     line_total: Optional[Decimal] = None
+    product: ProductShortResponse
 
 class OrderCreate(BaseModel):
     supplier_id: int
@@ -123,11 +127,11 @@ class OrderCreate(BaseModel):
 
 class OrderResponse(ORMBase):
     order_id: int
-    supplier_id: int
     status: str
     total_sum: Decimal
     created_at: datetime
     items: List[OrderItemResponse] = [] # Автоматично підтягне всі рядки замовлення
+    supplier: SupplierShortResponse
 
 class OrderStatusUpdate(BaseModel):
     new_status: str = Field(..., description="Новий статус: Confirmed, Delivered або Cancelled")
