@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 
 // Типи для TypeScript
@@ -22,12 +22,17 @@ interface OrderItemPayload {
   price_at_ord: number;
 }
 
+interface GroupedSuggestions {
+  [productId: number]: ReorderSuggestion[];
+}
+
 export default function ReorderSuggestionsPage() {
   const [suggestions, setSuggestions] = useState<ReorderSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  // Змінюємо Set на Map, щоб для кожного товару можна було обрати ЛИШЕ ОДНОГО постачальника
+  const [selectedItems, setSelectedItems] = useState<Map<number, string>>(new Map());
   const [orderQuantities, setOrderQuantities] = useState<{ [key: string]: string }>({});
   
   const [submissionStatus, setSubmissionStatus] = useState<{
@@ -36,8 +41,7 @@ export default function ReorderSuggestionsPage() {
     success: string | null;
   }>({ isLoading: false, error: null, success: null });
 
-  const fetchReorderSuggestions = async () => {
-    // ... (код завантаження даних залишається без змін)
+  useEffect(() => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -71,28 +75,25 @@ export default function ReorderSuggestionsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchReorderSuggestions();
   }, []);
 
-  const handleSelectItem = (itemKey: string) => {
+  const handleSelectItem = (productId: number, itemKey: string) => {
     setSelectedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemKey)) {
-        newSet.delete(itemKey);
+      const newMap = new Map(prev);
+      // Якщо вже обрано цього постачальника для цього товару, знімаємо вибір
+      if (newMap.get(productId) === itemKey) {
+        newMap.delete(productId);
       } else {
-        newSet.add(itemKey);
+        // Інакше, встановлюємо його як обраного для цього товару
+        newMap.set(productId, itemKey);
       }
-      return newSet;
+      return newMap;
     });
   };
 
   const handleQuantityChange = (itemKey: string, value: string) => {
     setOrderQuantities(prev => ({ ...prev, [itemKey]: value }));
   };
-
   const handleCreateOrders = async () => {
     if (selectedItems.size === 0) {
       setSubmissionStatus({ isLoading: false, error: 'Не обрано жодної позиції для замовлення.', success: null });
@@ -102,6 +103,7 @@ export default function ReorderSuggestionsPage() {
 
     // Групуємо обрані товари за постачальником
     const ordersBySupplier = new Map<number, OrderItemPayload[]>();
+    // Ітеруємо по значеннях Map (обраних ключах "product-supplier")
     selectedItems.forEach(key => {
       const [productId, supplierId] = key.split('-').map(Number);
       const suggestion = suggestions.find(s => s.product_id === productId && s.supplier_id === supplierId);
@@ -141,12 +143,23 @@ export default function ReorderSuggestionsPage() {
         throw new Error(`Не вдалося створити ${failed.length} з ${responses.length} замовлень.`);
       }
       setSubmissionStatus({ isLoading: false, error: null, success: `Успішно створено ${responses.length} замовлень.` });
-      setSelectedItems(new Set()); // Очищуємо вибір
-      fetchReorderSuggestions(); // Оновлюємо список
+      setSelectedItems(new Map()); // Очищуємо вибір
+      // Перезавантаження даних не потрібне, бо вони вже в state
     } catch (err: any) {
       setSubmissionStatus({ isLoading: false, error: err.message, success: null });
     }
   };
+  
+  // Групуємо пропозиції за товаром для зручного відображення
+  const groupedSuggestions = useMemo(() => {
+    return suggestions.reduce((acc, item) => {
+      if (!acc[item.product_id]) {
+        acc[item.product_id] = [];
+      }
+      acc[item.product_id].push(item);
+      return acc;
+    }, {} as GroupedSuggestions);
+  }, [suggestions]);
 
   if (loading) return <div className="p-10 text-xl text-center">Завантаження пропозицій...</div>;
   if (error) return <div className="p-10 text-xl text-center text-red-600">Помилка: {error}</div>;
@@ -175,32 +188,42 @@ export default function ReorderSuggestionsPage() {
         <div className="overflow-x-auto bg-white rounded-lg shadow-md">
           <table className="w-full text-left border-collapse">
             <thead className="text-sm text-gray-600 uppercase bg-gray-100 border-b">
-              <tr>
-                <th className="px-4 py-4 w-12 text-center"><input type="checkbox" disabled /></th>
-                <th className="px-4 py-4">Товар</th>
-                <th className="px-4 py-4">На складі / Точка замовлення</th>
-                <th className="px-4 py-4">Постачальник</th>
-                <th className="px-4 py-4">Ціна</th>
-                <th className="px-4 py-4 w-40">К-сть (упаковок)</th>
-              </tr>
+              {/* Заголовок таблиці залишається для загальної структури, але основний рендер буде в tbody */}
             </thead>
-            <tbody className="text-sm text-gray-700">
-              {suggestions.length === 0 ? (
-                <tr><td colSpan={6} className="p-6 text-center text-gray-500">Немає товарів, що потребують замовлення.</td></tr>
+            <tbody className="text-sm">
+              {Object.keys(groupedSuggestions).length === 0 ? (
+                <tr><td colSpan={5} className="p-6 text-center text-gray-500">Немає товарів, що потребують замовлення.</td></tr>
               ) : (
-                suggestions.map((item) => {
-                  const key = `${item.product_id}-${item.supplier_id}`;
+                Object.values(groupedSuggestions).map((productGroup) => {
+                  const product = productGroup[0];
                   return (
-                    <tr key={key} className={`border-b hover:bg-gray-50 ${selectedItems.has(key) ? 'bg-blue-50' : ''}`}>
-                      <td className="px-4 py-2 text-center"><input type="checkbox" checked={selectedItems.has(key)} onChange={() => handleSelectItem(key)} /></td>
-                      <td className="px-4 py-2 font-medium">{item.name} (ID: {item.product_id})</td>
-                      <td className="px-4 py-2">{item.current_stocks} / <span className="font-semibold text-red-600">{item.reorder_point}</span></td>
-                      <td className="px-4 py-2">{item.company_name}</td>
-                      <td className="px-4 py-2 font-bold">{Number(item.wh_price).toFixed(2)}</td>
-                      <td className="px-4 py-2">
-                        <input type="number" min="1" value={orderQuantities[key] || ''} onChange={(e) => handleQuantityChange(key, e.target.value)} className="w-full p-2 border rounded" />
-                      </td>
-                    </tr>
+                    <React.Fragment key={product.product_id}>
+                      <tr className="bg-gray-100 border-b-2 border-gray-200">
+                        <td colSpan={4} className="px-4 py-3 font-bold text-gray-800">
+                          {product.name} (На складі: {product.current_stocks} / Точка замовлення: {product.reorder_point})
+                        </td>
+                      </tr>
+                      <tr className="text-xs text-gray-500 uppercase">
+                        <th className="px-4 py-2 w-12"></th>
+                        <th className="px-4 py-2">Постачальник</th>
+                        <th className="px-4 py-2">Ціна за од.</th>
+                        <th className="px-4 py-2 w-40">К-сть (упаковок)</th>
+                      </tr>
+                      {productGroup.map(offer => {
+                        const key = `${offer.product_id}-${offer.supplier_id}`;
+                        const isSelected = selectedItems.get(offer.product_id) === key;
+                        return (
+                          <tr key={key} className={`border-b hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                            <td className="px-4 py-2 text-center"><input type="radio" name={`product-${offer.product_id}`} checked={isSelected} onChange={() => handleSelectItem(offer.product_id, key)} /></td>
+                            <td className="px-4 py-2 font-medium text-gray-800">{offer.company_name}</td>
+                            <td className="px-4 py-2 font-bold text-gray-900">{Number(offer.wh_price).toFixed(2)}</td>
+                            <td className="px-4 py-2">
+                              <input type="number" min={offer.moq_batches} value={orderQuantities[key] || ''} onChange={(e) => handleQuantityChange(key, e.target.value)} className="w-full p-2 border rounded" disabled={!isSelected} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })
               )}
