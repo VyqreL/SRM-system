@@ -77,22 +77,35 @@ def update_price_list_item(
         
     supplier = get_supplier_profile(db, current_user.user_id) # type: ignore
     
-    price_obj = db.query(models.PriceList).filter(
+    price_query = db.query(models.PriceList).filter(
         models.PriceList.price_id == price_id,
         models.PriceList.supplier_id == supplier.supplier_id
-    ).first()
+    )
     
-    if not price_obj:
+    # Використовуємо model_dump(exclude_unset=True) щоб оновлювати тільки передані поля
+    update_values = price_data.model_dump(exclude_unset=True)
+
+    # Якщо не передано жодного поля для оновлення
+    if not update_values:
+        raise HTTPException(status_code=400, detail="Не надано жодного поля для оновлення.")
+
+    # Виконуємо прямий UPDATE запит, щоб гарантовано викликати тригер БД.
+    # Це надійніше, ніж покладатися на відстеження змін в об'єкті сесії.
+    # query.update() повертає кількість оновлених рядків.
+    rows_updated = price_query.update(update_values, synchronize_session=False)
+    
+    if rows_updated == 0:
         raise HTTPException(status_code=404, detail="Позицію прайс-листа не знайдено або вона вам не належить.")
 
-    # Оновлення даних
-    price_obj.wh_price = price_data.wh_price # type: ignore
-    if price_data.moq_batches is not None: price_obj.moq_batches = price_data.moq_batches # type: ignore
-    if price_data.batch_size is not None: price_obj.batch_size = price_data.batch_size # type: ignore
-        
     db.commit()
-    db.refresh(price_obj)
-    return price_obj
+    
+    # Використовуємо сучасний Session.get() для отримання оновленого об'єкта.
+    # Це також вирішує попередження 'LegacyAPIWarning', яке могло виникати раніше.
+    updated_price_obj = db.get(models.PriceList, price_id)
+    if not updated_price_obj:
+        raise HTTPException(status_code=404, detail="Не вдалося отримати оновлений об'єкт після збереження.") # Додаткова перевірка
+    
+    return updated_price_obj
 
 @router.get("/{price_id}/history", response_model=List[schemas.PriceHistoryResponse])
 def get_price_history(price_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

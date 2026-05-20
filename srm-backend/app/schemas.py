@@ -63,9 +63,7 @@ class SupplierProfileResponse(SupplierProfileCreate):
     supplier_id: int
     user_id: int
     rating: Decimal
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
@@ -149,9 +147,7 @@ class PriceListCreate(BaseModel):
 class PriceListResponse(PriceListCreate):
     price_id: int
     supplier_id: int
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PriceListUpdate(BaseModel):
     wh_price: Decimal = Field(..., description="Нова ціна")
@@ -165,9 +161,7 @@ class PriceHistoryResponse(BaseModel):
     old_price: Decimal
     new_price: Decimal
     change_date: datetime
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Схеми для Оцінки ефективності ---
 class PerformanceCreate(BaseModel):
@@ -181,9 +175,7 @@ class PerformanceResponse(BaseModel):
     batch_id: int
     quality_rate: Decimal
     total_score: Decimal
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Схеми для Партій товару (Прийомка на склад) ---
@@ -198,9 +190,7 @@ class BatchResponse(BatchCreate):
     batch_id: int
     arrival_date: datetime
     status: str
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Схеми для Дефіциту (Reorder Suggestions) ---
 class ReorderSuggestionResponse(BaseModel):
@@ -211,6 +201,4 @@ class ReorderSuggestionResponse(BaseModel):
     supplier_id: int
     company_name: str
     wh_price: Decimal
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
