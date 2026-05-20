@@ -36,6 +36,10 @@ class ManagerInviteCreate(BaseModel):
 class ManagerCompleteRegistration(BaseModel):
     token: str
     password: str = Field(min_length=6)
+    
+class PasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
 
 # ==========================================
 # 2. ПОСТАЧАЛЬНИКИ (Suppliers)
@@ -63,6 +67,13 @@ class SupplierProfileCreate(BaseModel):
     address: Optional[str] = Field(None, description="Юридична адреса")
     default_payment_terms: Optional[str] = Field("Deferred", description="Умови оплати (напр. Deferred)")
     payment_deadline: int = Field(0, description="Відстрочка платежу в днях")
+
+class SupplierProfileUpdate(BaseModel):
+    company_name: Optional[str] = Field(None, description="Назва компанії")
+    edrpou: Optional[str] = Field(None, description="Код ЄДРПОУ")
+    address: Optional[str] = Field(None, description="Юридична адреса")
+    default_payment_terms: Optional[str] = Field(None, description="Умови оплати")
+    payment_deadline: Optional[int] = Field(None, description="Відстрочка платежу в днях")
 
 class SupplierProfileResponse(SupplierProfileCreate):
     supplier_id: int

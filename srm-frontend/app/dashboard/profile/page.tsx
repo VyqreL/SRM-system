@@ -8,10 +8,25 @@ interface UserProfile {
   is_active: boolean;
 }
 
+interface SupplierProfile {
+  company_name: string;
+  edrpou: string;
+  address: string;
+  default_payment_terms: string;
+  payment_deadline: number;
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [supplierProfile, setSupplierProfile] = useState<SupplierProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Стани для редагування
+  const [isEditingPwd, setIsEditingPwd] = useState(false);
+  const [pwdForm, setPwdForm] = useState({ current_password: '', new_password: '' });
+  const [isEditingSupplier, setIsEditingSupplier] = useState(false);
+  const [supplierForm, setSupplierForm] = useState<SupplierProfile>({ company_name: '', edrpou: '', address: '', default_payment_terms: 'Deferred', payment_deadline: 0 });
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -23,13 +38,20 @@ export default function ProfilePage() {
           return;
         }
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const resUser = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
 
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
+        if (resUser.ok) {
+          const userData = await resUser.json();
+          setUser(userData);
+          
+          if (userData.role === 'SUPPLIER') {
+            const resSupplier = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/suppliers/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (resSupplier.ok) {
+              const suppData = await resSupplier.json();
+              setSupplierProfile(suppData);
+              setSupplierForm(suppData);
+            }
+          }
         } else {
           setError('Не вдалося завантажити профіль');
         }
@@ -42,6 +64,50 @@ export default function ProfilePage() {
 
     fetchProfile();
   }, []);
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(pwdForm)
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Помилка при зміні пароля');
+      }
+      alert('Пароль успішно змінено!');
+      setIsEditingPwd(false);
+      setPwdForm({ current_password: '', new_password: '' });
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleSupplierUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/suppliers/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(supplierForm)
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Помилка при оновленні профілю');
+      }
+      const updatedData = await res.json();
+      setSupplierProfile(updatedData);
+      setSupplierForm(updatedData);
+      setIsEditingSupplier(false);
+      alert('Профіль успішно оновлено!');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   if (loading) return <div className="p-10 text-xl text-center">Завантаження профілю...</div>;
   if (error) return <div className="p-10 text-xl text-center text-red-600">Помилка: {error}</div>;
@@ -90,16 +156,71 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Блок зміни пароля */}
+        <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Безпека</h2>
+            {!isEditingPwd && (
+              <button onClick={() => setIsEditingPwd(true)} className="text-sm font-semibold text-blue-600 hover:underline">
+                Змінити пароль
+              </button>
+            )}
+          </div>
+          {isEditingPwd && (
+            <form onSubmit={handlePasswordUpdate} className="space-y-4 border-t pt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Поточний пароль</label>
+                <input type="password" required value={pwdForm.current_password} onChange={e => setPwdForm({...pwdForm, current_password: e.target.value})} className="mt-1 w-full p-2 border rounded-md" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Новий пароль</label>
+                <input type="password" required minLength={6} value={pwdForm.new_password} onChange={e => setPwdForm({...pwdForm, new_password: e.target.value})} className="mt-1 w-full p-2 border rounded-md" />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Зберегти</button>
+                <button type="button" onClick={() => setIsEditingPwd(false)} className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300">Скасувати</button>
+              </div>
+            </form>
+          )}
+        </div>
+
         {/* Блоки з додатковою інформацією залежно від ролі */}
         {user.role === 'SUPPLIER' && (
           <div className="mt-8 bg-blue-50 border border-blue-100 rounded-lg p-6">
-            <h2 className="text-xl font-bold text-blue-800 mb-2">Юридичний профіль компанії</h2>
-            <p className="text-blue-900 mb-4">
-              Тут ви можете керувати реквізитами своєї компанії (ЄДРПОУ, адреса, умови оплати), які необхідні для укладання замовлень.
-            </p>
-            <button className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded shadow hover:bg-blue-700 transition">
-              Керувати даними компанії
-            </button>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-blue-800">Юридичний профіль компанії</h2>
+              {!isEditingSupplier && (
+                <button onClick={() => setIsEditingSupplier(true)} className="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded shadow hover:bg-blue-700 transition">
+                  Редагувати профіль
+                </button>
+              )}
+            </div>
+            
+            {isEditingSupplier ? (
+              <form onSubmit={handleSupplierUpdate} className="space-y-4 bg-white p-4 rounded-lg shadow-sm border border-blue-100">
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-xs font-bold text-gray-500">Назва компанії</label><input required value={supplierForm.company_name} onChange={e => setSupplierForm({...supplierForm, company_name: e.target.value})} className="mt-1 w-full p-2 border rounded text-sm" /></div>
+                  <div><label className="block text-xs font-bold text-gray-500">ЄДРПОУ</label><input required value={supplierForm.edrpou} onChange={e => setSupplierForm({...supplierForm, edrpou: e.target.value})} className="mt-1 w-full p-2 border rounded text-sm" /></div>
+                  <div className="col-span-2"><label className="block text-xs font-bold text-gray-500">Юридична адреса</label><input value={supplierForm.address || ''} onChange={e => setSupplierForm({...supplierForm, address: e.target.value})} className="mt-1 w-full p-2 border rounded text-sm" /></div>
+                  <div><label className="block text-xs font-bold text-gray-500">Умови оплати</label><input value={supplierForm.default_payment_terms || ''} onChange={e => setSupplierForm({...supplierForm, default_payment_terms: e.target.value})} className="mt-1 w-full p-2 border rounded text-sm" /></div>
+                  <div><label className="block text-xs font-bold text-gray-500">Відстрочка (днів)</label><input type="number" value={supplierForm.payment_deadline} onChange={e => setSupplierForm({...supplierForm, payment_deadline: Number(e.target.value)})} className="mt-1 w-full p-2 border rounded text-sm" /></div>
+                </div>
+                <div className="flex gap-2 pt-2 border-t">
+                  <button type="submit" className="px-4 py-2 text-sm text-white bg-green-600 rounded-md hover:bg-green-700">Зберегти зміни</button>
+                  <button type="button" onClick={() => {setIsEditingSupplier(false); if(supplierProfile) setSupplierForm(supplierProfile);}} className="px-4 py-2 text-sm text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300">Скасувати</button>
+                </div>
+              </form>
+            ) : supplierProfile ? (
+              <div className="grid grid-cols-2 gap-4 mt-4 text-sm text-blue-900 bg-white p-4 rounded-lg shadow-sm">
+                <div><span className="font-bold text-blue-700 block">Назва:</span> {supplierProfile.company_name}</div>
+                <div><span className="font-bold text-blue-700 block">ЄДРПОУ:</span> {supplierProfile.edrpou || '—'}</div>
+                <div className="col-span-2"><span className="font-bold text-blue-700 block">Адреса:</span> {supplierProfile.address || '—'}</div>
+                <div><span className="font-bold text-blue-700 block">Умови оплати:</span> {supplierProfile.default_payment_terms || '—'}</div>
+                <div><span className="font-bold text-blue-700 block">Відстрочка:</span> {supplierProfile.payment_deadline} днів</div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic mt-4">Профіль компанії не знайдено.</p>
+            )}
           </div>
         )}
 
