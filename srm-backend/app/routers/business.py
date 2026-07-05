@@ -330,3 +330,96 @@ def update_product_mapping(
      .filter(models.PriceList.price_id == price_id).first()
 
     return result
+
+
+@router.get("/business/stocks/limits", response_model=List[schemas.StockLimitResponse])
+def get_stock_limits(
+    days: int = 7,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримання лімітів залишків на складі та обсягів продажів за останні N днів (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    start_date = datetime.now() - timedelta(days=days)
+
+    # Отримуємо всі записи з stocks разом із product та category
+    stocks = db.query(models.Stock).join(models.Product, models.Stock.product_id == models.Product.product_id)\
+        .join(models.Category, models.Product.category_id == models.Category.category_id).all()
+
+    response = []
+    for s in stocks:
+        delivered_qty = db.query(func.sum(models.OrderItem.total_units)).join(models.Order).filter(
+            models.OrderItem.product_id == s.product_id,
+            models.Order.status == "Delivered",
+            models.Order.created_at >= start_date
+        ).scalar() or 0
+
+        remaining_qty = db.query(func.sum(models.ProductBatch.curr_qty)).filter(
+            models.ProductBatch.product_id == s.product_id,
+            models.ProductBatch.arrival_date >= start_date,
+            models.ProductBatch.status == "Active"
+        ).scalar() or 0
+
+        sales_volume = max(0, delivered_qty - remaining_qty)
+
+        response.append(schemas.StockLimitResponse(
+            stock_id=s.stock_id,
+            product_id=s.product_id,
+            product_name=s.product.name,
+            internal_sku=s.product.internal_sku,
+            category_name=s.product.category.name,
+            current_quantity=s.quantity,
+            reorder_point=s.reorder_point,
+            sales_volume=sales_volume
+        ))
+
+    return response
+
+
+@router.put("/business/stocks/limits/{stock_id}", response_model=schemas.StockLimitResponse)
+def update_stock_limit(
+    stock_id: int,
+    limit_data: schemas.StockLimitUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Оновлення мінімального ліміту (reorder_point) товару на складі менеджером"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    stock = db.query(models.Stock).filter(models.Stock.stock_id == stock_id).first()
+    if not stock:
+        raise HTTPException(status_code=404, detail="Запис запасу на складі не знайдено.")
+
+    stock.reorder_point = limit_data.reorder_point
+    db.commit()
+
+    # Порахуємо за замовчуванням за останні 7 днів
+    start_date = datetime.now() - timedelta(days=7)
+    
+    delivered_qty = db.query(func.sum(models.OrderItem.total_units)).join(models.Order).filter(
+        models.OrderItem.product_id == stock.product_id,
+        models.Order.status == "Delivered",
+        models.Order.created_at >= start_date
+    ).scalar() or 0
+
+    remaining_qty = db.query(func.sum(models.ProductBatch.curr_qty)).filter(
+        models.ProductBatch.product_id == stock.product_id,
+        models.ProductBatch.arrival_date >= start_date,
+        models.ProductBatch.status == "Active"
+    ).scalar() or 0
+
+    sales_volume = max(0, delivered_qty - remaining_qty)
+
+    return schemas.StockLimitResponse(
+        stock_id=stock.stock_id,
+        product_id=stock.product_id,
+        product_name=stock.product.name,
+        internal_sku=stock.product.internal_sku,
+        category_name=stock.product.category.name,
+        current_quantity=stock.quantity,
+        reorder_point=stock.reorder_point,
+        sales_volume=sales_volume
+    )

@@ -356,3 +356,54 @@ def test_bulk_order_and_business_features(db: SessionLocal):
     warnings = res_warnings.json()
     assert len(warnings) > 0
     assert any(w["product_id"] == 1001 and w["days_left"] == 15 for w in warnings)
+
+
+def test_stock_limits_api(db: SessionLocal):
+    """
+    Тест №6: Перевірка отримання та оновлення лімітів залишків на складі (reorder_point)
+    та розрахунку швидкості продажів (sales_volume).
+    """
+    # 1. --- SETUP: Створюємо Менеджера ---
+    manager_email = f"manager_limits_{uuid.uuid4().hex[:6]}@srm.com"
+    hashed_pwd = security.get_password_hash("password123")
+    db.execute(text(f"INSERT INTO users (email, password_hash, role, is_active) VALUES ('{manager_email}', '{hashed_pwd}', 'MANAGER', true)"))
+    db.commit()
+    manager_token = get_token(manager_email, "password123")
+    manager_headers = {"Authorization": f"Bearer {manager_token}"}
+
+    # Підготовка: товар, категорія та запис запасу на складі
+    db.execute(text("INSERT INTO categories (category_id, name) VALUES (2001, 'Category 2001') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO products (product_id, category_id, internal_sku, name, unit) VALUES (2001, 2001, 'SKU-2001', 'Milk Limits', 'pcs') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO stocks (product_id, quantity, reorder_point) VALUES (2001, 150.0, 30.0) ON CONFLICT DO NOTHING"))
+    db.commit()
+
+    # Отримуємо ID створеного запису запасу
+    stock_rec = db.execute(text("SELECT stock_id FROM stocks WHERE product_id = 2001")).first()
+    assert stock_rec is not None
+    stock_id = stock_rec[0]
+
+    # 2. --- ТЕСТ GET /business/stocks/limits ---
+    res_get = client.get("/business/stocks/limits?days=7", headers=manager_headers)
+    assert res_get.status_code == 200
+    limits = res_get.json()
+    assert len(limits) > 0
+    milk_limit = next(l for l in limits if l["product_id"] == 2001)
+    assert float(milk_limit["reorder_point"]) == 30.0
+    assert float(milk_limit["current_quantity"]) == 150.0
+
+    # 3. --- ТЕСТ PUT /business/stocks/limits/{stock_id} ---
+    res_put = client.put(f"/business/stocks/limits/{stock_id}", json={"reorder_point": 45.5}, headers=manager_headers)
+    assert res_put.status_code == 200
+    assert float(res_put.json()["reorder_point"]) == 45.5
+
+    # Перевіримо оновлення в базі даних
+    db.expire_all()
+    updated_rec = db.execute(text(f"SELECT reorder_point FROM stocks WHERE stock_id = {stock_id}")).first()
+    assert updated_rec is not None
+    assert float(updated_rec[0]) == 45.5
+
+    # Очищення після тесту
+    db.execute(text(f"DELETE FROM stocks WHERE stock_id = {stock_id}"))
+    db.execute(text("DELETE FROM products WHERE product_id = 2001"))
+    db.execute(text("DELETE FROM categories WHERE category_id = 2001"))
+    db.commit()

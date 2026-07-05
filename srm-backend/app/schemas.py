@@ -307,3 +307,19 @@ class ProductOffersResponse(BaseModel):
     internal_sku: str
     unit: str
     offers: List[SupplierOffer]
+
+
+# 6. Керування лімітами залишків
+class StockLimitUpdate(BaseModel):
+    reorder_point: Decimal = Field(..., ge=0, description="Мінімальний ліміт товару на складі")
+
+class StockLimitResponse(BaseModel):
+    stock_id: int
+    product_id: int
+    product_name: str
+    internal_sku: str
+    category_name: str
+    current_quantity: Decimal
+    reorder_point: Decimal
+    sales_volume: Decimal
+    model_config = ConfigDict(from_attributes=True)

@@ -84,6 +84,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link href="/dashboard/manager/expirations" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager/expirations' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
                 ⚠️ Терміни придатності
               </Link>
+              <Link href="/dashboard/manager/stocks" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager/stocks' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                📦 Мінімуми складу
+              </Link>
             </nav>
           )}
           {user.role === 'SUPPLIER' && (

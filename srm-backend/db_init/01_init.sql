@@ -124,7 +124,9 @@ CREATE VIEW view_reorder_suggestions AS
     s.reorder_point,
     pl.supplier_id,
     sup.company_name,
-    pl.wh_price
+    pl.wh_price,
+    pl.batch_size,
+    pl.moq_batches
    FROM (((products p
      JOIN stocks s ON ((p.product_id = s.product_id)))
      JOIN price_lists pl ON ((p.product_id = pl.product_id)))
@@ -291,6 +293,10 @@ INSERT INTO order_items (item_id, order_id, product_id, ord_batches, batch_size,
 (3, 4, 7, 20, 6.000, 14.20, 'GAL-WATR-15'),
 (4, 4, 6, 10, 12.000, 120.00, 'string');
 SELECT setval('order_items_item_id_seq', (SELECT MAX(item_id) FROM order_items));
+
+INSERT INTO price_lists (supplier_id, product_id, sup_article, wh_price, moq_batches, batch_size) VALUES 
+(2, 6, 'GAL-MILK-01', 120.00, 1, 12.000),
+(2, 7, 'GAL-WATR-15', 14.20, 5, 6.000);
 
 INSERT INTO stocks (stock_id, product_id, quantity, reorder_point) VALUES 
 (1, 6, 120.000, 50.000),

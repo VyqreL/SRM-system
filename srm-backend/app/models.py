@@ -40,6 +40,7 @@ class Product(Base):
     
     category = relationship("Category", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
+    stock = relationship("Stock", back_populates="product", uselist=False)
 
 
 # Блок 3: Контрагенти (Постачальники)
@@ -131,3 +132,14 @@ class ProductBatch(Base):
     status = Column(String(20), default="Active")
 
     order = relationship("Order", back_populates="batches")
+
+
+class Stock(Base):
+    __tablename__ = "stocks"
+
+    stock_id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.product_id", ondelete="CASCADE"))
+    quantity = Column(Numeric(12, 3), default=0)
+    reorder_point = Column(Numeric(12, 3), default=10)
+
+    product = relationship("Product", back_populates="stock")
