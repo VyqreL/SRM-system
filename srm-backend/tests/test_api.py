@@ -407,3 +407,44 @@ def test_stock_limits_api(db: SessionLocal):
     db.execute(text("DELETE FROM products WHERE product_id = 2001"))
     db.execute(text("DELETE FROM categories WHERE category_id = 2001"))
     db.commit()
+
+
+def test_product_details_api(db: SessionLocal):
+    """
+    Тест №7: Перевірка отримання деталей товару та його історії цін
+    """
+    # 1. --- SETUP: Створюємо Менеджера та Постачальника ---
+    manager_email = f"manager_details_{uuid.uuid4().hex[:6]}@srm.com"
+    hashed_pwd = security.get_password_hash("password123")
+    db.execute(text(f"INSERT INTO users (email, password_hash, role, is_active) VALUES ('{manager_email}', '{hashed_pwd}', 'MANAGER', true)"))
+    db.execute(text("INSERT INTO users (user_id, email, password_hash, role) VALUES (3001, 'supp_details@srm.com', 'pwd', 'SUPPLIER') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO suppliers (supplier_id, user_id, company_name) VALUES (3001, 3001, 'Supplier Details') ON CONFLICT DO NOTHING"))
+    db.commit()
+
+    manager_token = get_token(manager_email, "password123")
+    manager_headers = {"Authorization": f"Bearer {manager_token}"}
+
+    # Підготовка: товар, категорія та історія цін
+    db.execute(text("INSERT INTO categories (category_id, name) VALUES (3001, 'Category 3001') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO products (product_id, category_id, internal_sku, name, unit) VALUES (3001, 3001, 'SKU-3001', 'Milk Details', 'pcs') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO price_history (supplier_id, product_id, old_price, new_price) VALUES (3001, 3001, 95.50, 110.00)"))
+    db.commit()
+
+    # 2. --- ТЕСТ GET /business/products/{product_id}/details ---
+    res = client.get("/business/products/3001/details", headers=manager_headers)
+    assert res.status_code == 200
+    details = res.json()
+    assert details["product_id"] == 3001
+    assert details["name"] == "Milk Details"
+    assert details["category_name"] == "Category 3001"
+    assert len(details["price_history"]) > 0
+    assert details["price_history"][0]["company_name"] == "Supplier Details"
+    assert float(details["price_history"][0]["new_price"]) == 110.00
+
+    # Очищення після тесту
+    db.execute(text("DELETE FROM price_history WHERE product_id = 3001"))
+    db.execute(text("DELETE FROM products WHERE product_id = 3001"))
+    db.execute(text("DELETE FROM categories WHERE category_id = 3001"))
+    db.execute(text("DELETE FROM suppliers WHERE supplier_id = 3001"))
+    db.execute(text("DELETE FROM users WHERE user_id = 3001"))
+    db.commit()

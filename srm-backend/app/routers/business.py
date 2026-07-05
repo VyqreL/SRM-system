@@ -423,3 +423,77 @@ def update_stock_limit(
         reorder_point=stock.reorder_point,
         sales_volume=sales_volume
     )
+
+
+@router.get("/business/products/{product_id}/details", response_model=schemas.ProductDetailsResponse)
+def get_product_details(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримання повної інформації про товар, його залишки, товарообіг та історію цін (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    product = db.query(models.Product).filter(models.Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не знайдено.")
+
+    # Отримуємо категорію
+    category_name = product.category.name if product.category else "Без категорії"
+
+    # Отримуємо поточний запас
+    stock = db.query(models.Stock).filter(models.Stock.product_id == product_id).first()
+    current_stock = stock.quantity if stock else 0
+
+    # Розрахунок закуплено (всього в доставлених та активних замовленнях)
+    total_purchased = db.query(func.sum(models.OrderItem.total_units)).join(models.Order).filter(
+        models.OrderItem.product_id == product_id,
+        models.Order.status.in_(["Confirmed", "Sent", "Delivered"])
+    ).scalar() or 0
+
+    # Розрахунок продано: всього доставлено - поточні залишки активних партій
+    total_delivered = db.query(func.sum(models.OrderItem.total_units)).join(models.Order).filter(
+        models.OrderItem.product_id == product_id,
+        models.Order.status == "Delivered"
+    ).scalar() or 0
+
+    current_active_batches_qty = db.query(func.sum(models.ProductBatch.curr_qty)).filter(
+        models.ProductBatch.product_id == product_id,
+        models.ProductBatch.status == "Active"
+    ).scalar() or 0
+
+    total_sold = max(0, total_delivered - current_active_batches_qty)
+
+    # Отримуємо історію цін
+    history_records = db.query(
+        models.PriceHistory.history_id,
+        models.Supplier.company_name,
+        models.PriceHistory.old_price,
+        models.PriceHistory.new_price,
+        models.PriceHistory.change_date
+    ).join(models.Supplier, models.PriceHistory.supplier_id == models.Supplier.supplier_id)\
+     .filter(models.PriceHistory.product_id == product_id)\
+     .order_by(models.PriceHistory.change_date.asc()).all()
+
+    price_history = [
+        schemas.PriceHistoryPoint(
+            history_id=h.history_id,
+            company_name=h.company_name,
+            old_price=h.old_price,
+            new_price=h.new_price,
+            change_date=h.change_date
+        ) for h in history_records
+    ]
+
+    return schemas.ProductDetailsResponse(
+        product_id=product.product_id,
+        name=product.name,
+        internal_sku=product.internal_sku,
+        unit=product.unit,
+        category_name=category_name,
+        current_stock=current_stock,
+        total_purchased=total_purchased,
+        total_sold=total_sold,
+        price_history=price_history
+    )

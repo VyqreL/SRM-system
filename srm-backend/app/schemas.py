@@ -323,3 +323,25 @@ class StockLimitResponse(BaseModel):
     reorder_point: Decimal
     sales_volume: Decimal
     model_config = ConfigDict(from_attributes=True)
+
+
+# 7. Деталі товару та історія цін
+class PriceHistoryPoint(BaseModel):
+    history_id: int
+    company_name: str
+    old_price: Decimal
+    new_price: Decimal
+    change_date: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class ProductDetailsResponse(BaseModel):
+    product_id: int
+    name: str
+    internal_sku: str
+    unit: str
+    category_name: str
+    current_stock: Decimal
+    total_purchased: Decimal
+    total_sold: Decimal
+    price_history: List[PriceHistoryPoint]
+    model_config = ConfigDict(from_attributes=True)

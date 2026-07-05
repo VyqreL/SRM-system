@@ -125,7 +125,11 @@ export default function ExpirationsControlPage() {
                       <tr key={w.batch_id} className={`hover:bg-gray-50/50 transition border-l-4 ${
                         w.days_left <= 7 ? 'border-l-red-500' : w.days_left <= 15 ? 'border-l-orange-500' : 'border-l-yellow-400'
                       }`}>
-                        <td className="px-6 py-4 font-bold text-gray-800">{w.product_name}</td>
+                        <td className="px-6 py-4">
+                          <Link href={`/dashboard/manager/products/${w.product_id}`} className="font-bold text-blue-600 hover:text-blue-800 hover:underline">
+                            {w.product_name}
+                          </Link>
+                        </td>
                         <td className="px-6 py-4 font-mono text-xs font-semibold text-gray-500">{w.internal_sku}</td>
                         <td className="px-6 py-4 font-mono font-bold text-gray-700">
                           {Number(w.curr_qty).toFixed(0)} шт

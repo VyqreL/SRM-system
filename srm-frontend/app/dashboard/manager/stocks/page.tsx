@@ -187,7 +187,9 @@ export default function StockLimitsPage() {
                     return (
                       <tr key={l.stock_id} className="hover:bg-gray-50/50 transition">
                         <td className="px-6 py-4">
-                          <span className="font-bold text-gray-800 block">{l.product_name}</span>
+                          <Link href={`/dashboard/manager/products/${l.product_id}`} className="font-bold text-blue-600 hover:text-blue-800 hover:underline block">
+                            {l.product_name}
+                          </Link>
                           <span className="text-xs text-gray-400 font-mono font-semibold">{l.internal_sku}</span>
                         </td>
                         <td className="px-6 py-4">

@@ -157,7 +157,7 @@ export default function OrderDetailsPage() {
   return (
     <div className="p-8">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-6">
+        <div className="mb-6 no-print">
           <button onClick={() => router.back()} className="text-blue-600 hover:text-blue-800 transition flex items-center gap-2 w-max">
             <span>&larr;</span> Повернутися назад
           </button>
@@ -167,7 +167,15 @@ export default function OrderDetailsPage() {
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800">Замовлення #{order.order_id}</h1>
+              <div className="flex items-center gap-4">
+                <h1 className="text-3xl font-bold text-gray-800">Замовлення #{order.order_id}</h1>
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition no-print"
+                >
+                  🖨️ Друк / PDF
+                </button>
+              </div>
               <p className="text-gray-500 mt-1 flex items-center gap-2">
                 Постачальник: <span className="font-semibold text-gray-700">{order.supplier.company_name}</span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Рейтинг постачальника">
@@ -279,6 +287,43 @@ export default function OrderDetailsPage() {
           </div>
         </div>
       )}
+      <style jsx global>{`
+        @media print {
+          /* Приховуємо навігацію сайту, сайдбар, футер, шапку та кнопки */
+          header, nav, aside, footer, button, .no-print, [title="Рейтинг постачальника"] {
+            display: none !important;
+          }
+          /* Робимо фон білим для друку */
+          body {
+            background-color: white !important;
+            color: black !important;
+          }
+          /* Розширюємо контент на весь лист */
+          .max-w-5xl {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .p-8 {
+            padding: 0 !important;
+          }
+          /* Скидаємо тіні блоків */
+          .bg-white {
+            background-color: white !important;
+            border: 1px solid #e5e7eb !important;
+            box-shadow: none !important;
+          }
+          .shadow-md {
+            box-shadow: none !important;
+          }
+          /* Додаємо поля */
+          @page {
+            size: A4;
+            margin: 1.5cm;
+          }
+        }
+      `}</style>
     </div>
   );
 }

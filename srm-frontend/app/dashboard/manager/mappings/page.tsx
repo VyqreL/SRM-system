@@ -129,7 +129,9 @@ export default function NomenclatureMappingPage() {
                   mappings.map(m => (
                     <tr key={m.price_id} className="hover:bg-gray-50/50 transition">
                       <td className="px-6 py-4">
-                        <span className="font-bold text-gray-800 block">{m.product_name}</span>
+                        <Link href={`/dashboard/manager/products/${m.product_id}`} className="font-bold text-blue-600 hover:text-blue-800 hover:underline block">
+                          {m.product_name}
+                        </Link>
                         <span className="text-xs text-gray-400 font-mono font-semibold">{m.internal_sku}</span>
                       </td>
                       <td className="px-6 py-4">
