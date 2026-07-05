@@ -5,212 +5,372 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // --- Типи даних ---
-interface Supplier {
+interface SupplierOffer {
   supplier_id: number;
   company_name: string;
+  wh_price: number;
+  moq_batches: number;
+  batch_size: number;
+  sup_article?: string;
+  rating: number;
 }
 
-interface Product {
+interface ProductWithOffers {
   product_id: number;
   name: string;
-  wh_price: number;
-  batch_size: number;
-  moq_batches: number;
+  internal_sku: string;
+  unit: string;
+  offers: SupplierOffer[];
 }
 
-interface OrderItem extends Product {
+interface CartItem {
+  product_id: number;
+  product_name: string;
+  internal_sku: string;
+  selected_offer: SupplierOffer;
   ord_batches: number;
 }
 
-// --- Компонент ---
 export default function CreateOrderPage() {
   const router = useRouter();
-  
+
   // --- Стан компонента ---
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [products, setProducts] = useState<ProductWithOffers[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
-  const [loading, setLoading] = useState({ suppliers: true, products: false });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [submission, setSubmission] = useState<{loading: boolean, error: string | null, success: string | null}>({ loading: false, error: null, success: null });
+  const [submission, setSubmission] = useState<{
+    loading: boolean;
+    error: string | null;
+    success: string | null;
+  }>({ loading: false, error: null, success: null });
 
-  // --- Завантаження даних ---
+  // --- Завантаження каталогу товарів з пропозиціями ---
   useEffect(() => {
-    const fetchSuppliers = async () => {
+    const fetchProductsAndOffers = async () => {
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suppliers/`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/business/products/offers`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) throw new Error('Не вдалося завантажити постачальників.');
-        const data = await res.json();
-        setSuppliers(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(prev => ({ ...prev, suppliers: false }));
-      }
-    };
-    fetchSuppliers();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedSupplierId) {
-      setProducts([]);
-      setOrderItems([]); // Очищуємо кошик при зміні постачальника
-      return;
-    }
-    
-    const fetchProducts = async () => {
-      setLoading(prev => ({ ...prev, products: true }));
-      setError(null);
-      const token = localStorage.getItem('token');
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/suppliers/${selectedSupplierId}/products`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error('Не вдалося завантажити товари для цього постачальника.');
+        if (!res.ok) throw new Error('Не вдалося завантажити каталог товарів з пропозиціями.');
         const data = await res.json();
         setProducts(data);
       } catch (err: any) {
         setError(err.message);
       } finally {
-        setLoading(prev => ({ ...prev, products: false }));
+        setLoading(false);
       }
     };
-    
-    fetchProducts();
-  }, [selectedSupplierId]);
+    fetchProductsAndOffers();
+  }, []);
+
+  // --- Фільтрація товарів ---
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const term = searchTerm.toLowerCase();
+    return products.filter(p => 
+      p.name.toLowerCase().includes(term) || 
+      p.internal_sku.toLowerCase().includes(term)
+    );
+  }, [products, searchTerm]);
 
   // --- Обробники подій ---
-  const handleAddProduct = (product: Product) => {
-    if (orderItems.find(item => item.product_id === product.product_id)) return;
-    setOrderItems(prev => [...prev, { ...product, ord_batches: product.moq_batches }]);
-  };
-
-  const handleRemoveItem = (productId: number) => {
-    setOrderItems(prev => prev.filter(item => item.product_id !== productId));
-  };
-
-  const handleQuantityChange = (productId: number, newQuantity: string) => {
-    const qty = parseInt(newQuantity, 10);
-    setOrderItems(prev => prev.map(item => 
-      item.product_id === productId ? { ...item, ord_batches: isNaN(qty) || qty < 0 ? 0 : qty } : item
-    ));
-  };
-
-  const handleSubmitOrder = async () => {
-    if (!selectedSupplierId || orderItems.length === 0) {
-      setSubmission({ ...submission, error: 'Оберіть постачальника та додайте товари до замовлення.' });
+  const handleAddProductToCart = (product: ProductWithOffers, offer: SupplierOffer) => {
+    // Якщо товар вже є в кошику, не додаємо дубль
+    const existing = cart.find(item => item.product_id === product.product_id);
+    if (existing) {
+      alert(`Товар "${product.name}" вже є в кошику. Ви можете змінити його кількість або постачальника безпосередньо у кошику.`);
       return;
     }
-    
+
+    const newItem: CartItem = {
+      product_id: product.product_id,
+      product_name: product.name,
+      internal_sku: product.internal_sku,
+      selected_offer: offer,
+      ord_batches: offer.moq_batches // встановлюємо MOQ за замовчуванням
+    };
+
+    setCart(prev => [...prev, newItem]);
+  };
+
+  const handleRemoveFromCart = (productId: number) => {
+    setCart(prev => prev.filter(item => item.product_id !== productId));
+  };
+
+  const handleQtyChange = (productId: number, qtyString: string) => {
+    const qty = parseInt(qtyString, 10);
+    setCart(prev => prev.map(item => {
+      if (item.product_id === productId) {
+        const val = isNaN(qty) || qty < 0 ? 0 : qty;
+        return { ...item, ord_batches: val };
+      }
+      return item;
+    }));
+  };
+
+  const handleSupplierChangeInCart = (productId: number, newSupplierId: number, product: ProductWithOffers) => {
+    const offer = product.offers.find(o => o.supplier_id === newSupplierId);
+    if (!offer) return;
+
+    setCart(prev => prev.map(item => {
+      if (item.product_id === productId) {
+        return {
+          ...item,
+          selected_offer: offer,
+          ord_batches: offer.moq_batches // Зкидаємо на MOQ нового постачальника
+        };
+      }
+      return item;
+    }));
+  };
+
+  // --- Групування кошика за постачальником ---
+  const groupedCart = useMemo(() => {
+    const groups: { [companyName: string]: { supplier_id: number; items: CartItem[]; total: number } } = {};
+    cart.forEach(item => {
+      const company = item.selected_offer.company_name;
+      if (!groups[company]) {
+        groups[company] = {
+          supplier_id: item.selected_offer.supplier_id,
+          items: [],
+          total: 0
+        };
+      }
+      groups[company].items.push(item);
+      groups[company].total += item.ord_batches * item.selected_offer.batch_size * item.selected_offer.wh_price;
+    });
+    return groups;
+  }, [cart]);
+
+  const totalSum = useMemo(() => {
+    return cart.reduce((sum, item) => 
+      sum + (item.ord_batches * item.selected_offer.batch_size * item.selected_offer.wh_price), 0
+    );
+  }, [cart]);
+
+  // --- Відправка bulk замовлення ---
+  const handleSubmitBulkOrders = async () => {
+    if (cart.length === 0) {
+      setSubmission({ ...submission, error: 'Додайте хоча б один товар у кошик.' });
+      return;
+    }
+
+    // Валідація MOQ перед відправкою
+    const moqErrors: string[] = [];
+    cart.forEach(item => {
+      if (item.ord_batches < item.selected_offer.moq_batches) {
+        moqErrors.push(`Мінімальне замовлення для "${item.product_name}" у постачальника "${item.selected_offer.company_name}" складає ${item.selected_offer.moq_batches} уп. (Вказано: ${item.ord_batches} уп.)`);
+      }
+    });
+
+    if (moqErrors.length > 0) {
+      setSubmission({ ...submission, error: moqErrors.join('\n') });
+      return;
+    }
+
     setSubmission({ loading: true, error: null, success: null });
     const token = localStorage.getItem('token');
-    
+
     const payload = {
-      supplier_id: parseInt(selectedSupplierId, 10),
-      items: orderItems.map(item => ({
+      items: cart.map(item => ({
         product_id: item.product_id,
+        supplier_id: item.selected_offer.supplier_id,
         ord_batches: item.ord_batches,
-        batch_size: item.batch_size,
-        price_at_ord: item.wh_price,
-      })),
+        batch_size: item.selected_offer.batch_size,
+        price_at_ord: item.selected_offer.wh_price,
+        sup_article: item.selected_offer.sup_article || null
+      }))
     };
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
       });
-      
+
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.detail || 'Не вдалося створити замовлення.');
+        throw new Error(errData.detail || 'Не вдалося створити інвойси.');
       }
-      
-      setSubmission({ loading: false, error: null, success: 'Замовлення успішно створено!' });
-      setTimeout(() => router.push('/dashboard/manager'), 2000);
+
+      const created = await res.json();
+      setSubmission({
+        loading: false,
+        error: null,
+        success: `Успішно створено ${created.length} інвойсів для різних постачальників!`
+      });
+      setTimeout(() => router.push('/dashboard/manager'), 2500);
     } catch (err: any) {
       setSubmission({ loading: false, error: err.message, success: null });
     }
   };
 
-  // --- Розрахунки ---
-  const totalSum = useMemo(() => {
-    return orderItems.reduce((sum, item) => sum + (item.ord_batches * item.batch_size * item.wh_price), 0);
-  }, [orderItems]);
+  if (loading) return <div className="p-10 text-xl text-center">Завантаження каталогу товарів...</div>;
 
-  // --- Рендер ---
   return (
-    <div className="p-8">
+    <div className="p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <Link href="/dashboard/manager" className="text-blue-600 hover:text-blue-800 transition flex items-center gap-2 w-max">
             <span>&larr;</span> Повернутися до кабінету
           </Link>
         </div>
-        <h1 className="text-3xl font-bold text-gray-800 mb-8">Створення нового замовлення</h1>
-        
-        {error && <div className="p-4 mb-4 text-red-800 bg-red-100 rounded-lg">{error}</div>}
-        
+
+        <h1 className="text-3xl font-black text-gray-800 mb-8">Групове створення інвойсів на закупівлю</h1>
+
+        {error && <div className="p-4 mb-4 text-red-800 bg-red-100 rounded-lg shadow-sm">{error}</div>}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* --- Ліва колонка: Вибір товарів --- */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-bold mb-4">1. Оберіть постачальника та товари</h2>
-            <div className="mb-6">
-              <label className="block mb-2 text-sm font-medium text-gray-700">Постачальник</label>
-              <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} disabled={loading.suppliers} className="w-full p-2 border rounded-md bg-gray-50 disabled:bg-gray-200">
-                <option value="">{loading.suppliers ? 'Завантаження...' : '-- Оберіть постачальника --'}</option>
-                {suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.company_name}</option>)}
-              </select>
+          {/* --- Ліва колонка: Каталог товарів --- */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+              <h2 className="text-xl font-bold text-gray-800">1. Оберіть товари та постачальників</h2>
+              <input
+                type="text"
+                placeholder="Пошук за назвою або SKU..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 w-full md:w-64"
+              />
             </div>
-            {selectedSupplierId && (
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Доступні товари</h3>
-                {loading.products ? <p>Завантаження товарів...</p> : (
-                  <div className="max-h-96 overflow-y-auto border rounded-md">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-gray-100 sticky top-0"><tr><th className="p-3">Товар</th><th className="p-3">Ціна за од.</th><th className="p-3"></th></tr></thead>
-                      <tbody>
-                        {products.length > 0 ? products.map(p => (
-                          <tr key={p.product_id} className="border-b">
-                            <td className="p-3">{p.name}</td>
-                            <td className="p-3 font-mono">{Number(p.wh_price).toFixed(2)}</td>
-                            <td className="p-3 text-right"><button onClick={() => handleAddProduct(p)} disabled={!!orderItems.find(i => i.product_id === p.product_id)} className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 disabled:bg-gray-300">Додати</button></td>
-                          </tr>
-                        )) : <tr><td colSpan={3} className="p-4 text-center text-gray-500">У цього постачальника немає товарів у прайсі.</td></tr>}
-                      </tbody>
-                    </table>
+
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map(product => (
+                  <div key={product.product_id} className="p-4 border rounded-xl hover:shadow-sm transition bg-white border-gray-100 flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div>
+                      <h3 className="font-bold text-gray-800">{product.name}</h3>
+                      <p className="text-xs text-gray-500">Внутрішній SKU: <span className="font-mono">{product.internal_sku}</span> | Од: {product.unit}</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {product.offers.length > 0 ? (
+                        product.offers.map(offer => (
+                          <button
+                            key={offer.supplier_id}
+                            onClick={() => handleAddProductToCart(product, offer)}
+                            className="p-2 text-left border rounded-lg hover:border-blue-500 hover:bg-blue-50/50 transition flex flex-col min-w-[150px]"
+                          >
+                            <span className="text-xs font-bold text-gray-800 truncate block max-w-[130px]">{offer.company_name}</span>
+                            <span className="text-sm font-black text-blue-600 font-mono mt-1">{Number(offer.wh_price).toFixed(2)} грн</span>
+                            <span className="text-[10px] text-gray-500 mt-1">MOQ: {offer.moq_batches} уп. | ⭐ {Number(offer.rating).toFixed(2)}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <span className="text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg font-semibold">Немає пропозицій</span>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                ))
+              ) : (
+                <p className="text-center text-gray-500 py-10">Товарів за вашим запитом не знайдено.</p>
+              )}
+            </div>
           </div>
 
-          {/* --- Права колонка: Кошик --- */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-bold mb-4">2. Склад замовлення</h2>
-            {orderItems.length === 0 ? <p className="text-gray-500 text-center mt-10">Кошик порожній.</p> : (
-              <div className="space-y-4">
-                {orderItems.map(item => (
-                  <div key={item.product_id} className="flex items-center gap-4 p-2 border-b">
-                    <div className="flex-1"><p className="font-semibold">{item.name}</p><p className="text-xs text-gray-500">MOQ: {item.moq_batches} уп. | В уп: {item.batch_size}</p></div>
-                    <input type="number" value={item.ord_batches} onChange={(e) => handleQuantityChange(item.product_id, e.target.value)} min={item.moq_batches} className="w-20 p-2 border rounded-md text-center" />
-                    <button onClick={() => handleRemoveItem(item.product_id)} className="text-red-500 hover:text-red-700 text-2xl font-bold">&times;</button>
+          {/* --- Права колонка: Кошик та Групування --- */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[500px]">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">2. Склад замовлення (Кошик)</h2>
+
+            {cart.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-20">
+                <span className="text-5xl mb-3">🛒</span>
+                <p className="text-gray-400 text-sm text-center">Оберіть товари та постачальників зліва, щоб сформувати замовлення.</p>
+              </div>
+            ) : (
+              <div className="flex-1 space-y-6 overflow-y-auto max-h-[450px] pr-1">
+                {Object.entries(groupedCart).map(([companyName, group]) => (
+                  <div key={companyName} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="border-b pb-2 mb-3 flex justify-between items-center">
+                      <span className="font-bold text-gray-800 text-sm truncate max-w-[180px]">{companyName}</span>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                        {Number(group.total).toFixed(2)} грн
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {group.items.map(item => {
+                        const originalProduct = products.find(p => p.product_id === item.product_id);
+                        return (
+                          <div key={item.product_id} className="text-xs flex flex-col gap-2 p-2 bg-white rounded-lg shadow-2xs">
+                            <div className="flex justify-between items-start">
+                              <span className="font-bold text-gray-700">{item.product_name}</span>
+                              <button
+                                onClick={() => handleRemoveFromCart(item.product_id)}
+                                className="text-gray-400 hover:text-red-500 font-bold transition text-sm"
+                              >
+                                &times;
+                              </button>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 mt-1">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-500">Ціна: {Number(item.selected_offer.wh_price).toFixed(2)} грн/уп</span>
+                                <span className="text-[10px] text-gray-400">MOQ: {item.selected_offer.moq_batches} уп.</span>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={item.ord_batches}
+                                  onChange={(e) => handleQtyChange(item.product_id, e.target.value)}
+                                  min={item.selected_offer.moq_batches}
+                                  className={`w-16 p-1 border rounded text-center font-bold ${
+                                    item.ord_batches < item.selected_offer.moq_batches ? 'border-red-500 text-red-600 bg-red-50' : 'bg-gray-50'
+                                  }`}
+                                />
+                                <span className="text-gray-500 text-[10px]">уп.</span>
+                              </div>
+                            </div>
+
+                            {/* Дозволяємо перемикати постачальника для цього ж товару прямо в кошику */}
+                            {originalProduct && originalProduct.offers.length > 1 && (
+                              <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-1">
+                                <span className="text-[9px] text-gray-400 uppercase font-semibold">Постачальник:</span>
+                                <select
+                                  value={item.selected_offer.supplier_id}
+                                  onChange={(e) => handleSupplierChangeInCart(item.product_id, parseInt(e.target.value, 10), originalProduct)}
+                                  className="p-1 border rounded text-[10px] bg-gray-50 max-w-[140px]"
+                                >
+                                  {originalProduct.offers.map(off => (
+                                    <option key={off.supplier_id} value={off.supplier_id}>
+                                      {off.company_name} ({Number(off.wh_price).toFixed(0)} грн)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
-                <div className="pt-4 mt-4 border-t text-right"><p className="text-lg font-bold">Всього: {totalSum.toFixed(2)} грн</p></div>
+
+                <div className="pt-4 border-t flex justify-between items-center">
+                  <span className="text-base font-bold text-gray-800">Загальна сума:</span>
+                  <span className="text-xl font-black text-blue-600 font-mono">{totalSum.toFixed(2)} грн</span>
+                </div>
               </div>
             )}
-            <div className="mt-6">
-              {submission.success && <div className="p-3 mb-4 text-green-800 bg-green-100 rounded">{submission.success}</div>}
-              {submission.error && <div className="p-3 mb-4 text-red-800 bg-red-100 rounded">{submission.error}</div>}
-              <button onClick={handleSubmitOrder} disabled={orderItems.length === 0 || submission.loading || !!submission.success} className="w-full p-3 font-bold text-white bg-green-600 rounded-lg shadow hover:bg-green-700 disabled:bg-gray-400">
-                {submission.loading ? 'Створення...' : 'Створити замовлення'}
+
+            <div className="mt-6 pt-4 border-t border-gray-100">
+              {submission.success && <div className="p-3 mb-4 text-sm text-green-800 bg-green-100 rounded-lg">{submission.success}</div>}
+              {submission.error && <div className="p-3 mb-4 text-sm text-red-800 bg-red-100 rounded-lg whitespace-pre-line">{submission.error}</div>}
+              <button
+                onClick={handleSubmitBulkOrders}
+                disabled={cart.length === 0 || submission.loading || !!submission.success}
+                className="w-full p-3 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+              >
+                {submission.loading ? 'Створення...' : 'Сформувати інвойси'}
               </button>
             </div>
           </div>

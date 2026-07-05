@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import text, func
 from typing import List
-from datetime import timedelta
+from datetime import datetime, date, timedelta
+from decimal import Decimal
 from app import models, schemas
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -106,3 +107,226 @@ def get_reorder_suggestions(
     # Використовуємо існуючу VIEW у базі даних за допомогою "text"
     suggestions = db.execute(text("SELECT * FROM view_reorder_suggestions")).mappings().all()
     return suggestions
+
+
+@router.get("/business/products/offers", response_model=List[schemas.ProductOffersResponse])
+def get_products_with_offers(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримання всіх товарів з доступними пропозиціями від постачальників (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    products = db.query(models.Product).all()
+    response = []
+    for prod in products:
+        # Отримуємо всі ціни для цього товару
+        prices = db.query(models.PriceList).filter(models.PriceList.product_id == prod.product_id).all()
+        offers = []
+        for price in prices:
+            supplier = db.query(models.Supplier).filter(models.Supplier.supplier_id == price.supplier_id).first()
+            if supplier:
+                offers.append(schemas.SupplierOffer(
+                    supplier_id=price.supplier_id,
+                    company_name=supplier.company_name,
+                    wh_price=price.wh_price,
+                    moq_batches=price.moq_batches,
+                    batch_size=price.batch_size,
+                    sup_article=price.sup_article,
+                    rating=supplier.rating
+                ))
+        response.append(schemas.ProductOffersResponse(
+            product_id=prod.product_id,
+            name=prod.name,
+            internal_sku=prod.internal_sku,
+            unit=prod.unit,
+            offers=offers
+        ))
+    return response
+
+
+@router.get("/business/analytics", response_model=schemas.AnalyticsDashboardResponse)
+def get_analytics_dashboard(
+    period: str = "week",  # week, month, quarter
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Дашборд аналітики за замовленнями та OTIF рейтингом (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    # Визначаємо початкову дату
+    now = datetime.now()
+    if period == "week":
+        start_date = now - timedelta(days=7)
+        days_step = 1
+    elif period == "month":
+        start_date = now - timedelta(days=30)
+        days_step = 5  # групуємо по 5 днів
+    elif period == "quarter":
+        start_date = now - timedelta(days=90)
+        days_step = 15  # групуємо по 15 днів
+    else:
+        raise HTTPException(status_code=400, detail="Неприпустимий період. Очікується week, month або quarter.")
+
+    # 1. Отримуємо всі замовлення за цей період
+    orders = db.query(models.Order).filter(
+        models.Order.created_at >= start_date,
+        models.Order.status != "Cancelled"
+    ).all()
+
+    # Рахуємо загальні витрати (сума замовлень у статусі Delivered або Confirmed або Sent)
+    active_statuses = ["Confirmed", "Sent", "Delivered"]
+    expenses_orders = [o for o in orders if o.status in active_statuses]
+    total_expenses = sum(o.total_sum for o in expenses_orders)
+    total_earnings = total_expenses * Decimal("0.30")  # Оціночний заробіток (30% маржа)
+    total_orders = len(orders)
+
+    # 2. Розраховуємо OTIF та якість доставки
+    perf_records = db.query(models.PerformanceRecord).join(
+        models.ProductBatch, models.PerformanceRecord.batch_id == models.ProductBatch.batch_id
+    ).filter(
+        models.ProductBatch.arrival_date >= start_date
+    ).all()
+
+    if perf_records:
+        avg_otif = sum(r.total_score for r in perf_records) / len(perf_records)
+        avg_quality = sum(r.quality_rate for r in perf_records) / len(perf_records)
+        # Вчасність доставки: відсоток замовлень, де delta_time <= 0 днів
+        on_time_count = sum(1 for r in perf_records if r.delta_time <= timedelta(seconds=0))
+        timeliness_rate = Decimal(on_time_count) / Decimal(len(perf_records))
+    else:
+        avg_otif = Decimal("1.00")
+        avg_quality = Decimal("1.00")
+        timeliness_rate = Decimal("1.00")
+
+    # 3. Генеруємо дані для графіка
+    chart_data = []
+    current_date = start_date
+    while current_date <= now:
+        next_date = current_date + timedelta(days=days_step)
+        interval_orders = [
+            o for o in expenses_orders
+            if current_date <= o.created_at < next_date
+        ]
+        interval_expenses = sum(o.total_sum for o in interval_orders)
+        interval_earnings = interval_expenses * Decimal("0.30")
+
+        chart_data.append(schemas.AnalyticsChartPoint(
+            date=current_date.strftime("%d.%m"),
+            expenses=interval_expenses,
+            earnings=interval_earnings
+        ))
+        current_date = next_date
+
+    return schemas.AnalyticsDashboardResponse(
+        total_expenses=total_expenses,
+        total_earnings=total_earnings,
+        total_orders=total_orders,
+        otif_rate=avg_otif,
+        quality_rate=avg_quality,
+        timeliness_rate=timeliness_rate,
+        chart_data=chart_data
+    )
+
+
+@router.get("/business/batches/expiration-warnings", response_model=List[schemas.ExpirationWarningResponse])
+def get_expiration_warnings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Попередження про товари на складі, термін придатності яких спливає незабаром (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    today = date.today()
+    warning_limit = today + timedelta(days=30)
+
+    # Отримуємо активні партії з залишками на складі
+    batches = db.query(models.ProductBatch).filter(
+        models.ProductBatch.status == "Active",
+        models.ProductBatch.curr_qty > 0,
+        models.ProductBatch.exp_date <= warning_limit
+    ).order_by(models.ProductBatch.exp_date).all()
+
+    response = []
+    for batch in batches:
+        product = db.query(models.Product).filter(models.Product.product_id == batch.product_id).first()
+        if product:
+            days_left = (batch.exp_date - today).days
+            response.append(schemas.ExpirationWarningResponse(
+                batch_id=batch.batch_id,
+                product_id=batch.product_id,
+                product_name=product.name,
+                internal_sku=product.internal_sku,
+                exp_date=batch.exp_date,
+                curr_qty=batch.curr_qty,
+                days_left=days_left,
+                status=batch.status
+            ))
+    return response
+
+
+@router.get("/business/prices/mappings", response_model=List[schemas.ProductMappingResponse])
+def get_product_mappings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримання списку товарів у прайсах із артикулами постачальників (для Менеджера)"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    results = db.query(
+        models.PriceList.price_id,
+        models.PriceList.product_id,
+        models.Product.name.label("product_name"),
+        models.Product.internal_sku.label("internal_sku"),
+        models.Category.name.label("category_name"),
+        models.PriceList.supplier_id,
+        models.Supplier.company_name.label("company_name"),
+        models.PriceList.sup_article.label("sup_article"),
+        models.PriceList.wh_price.label("wh_price")
+    ).join(models.Product, models.PriceList.product_id == models.Product.product_id)\
+     .join(models.Category, models.Product.category_id == models.Category.category_id)\
+     .join(models.Supplier, models.PriceList.supplier_id == models.Supplier.supplier_id)\
+     .order_by(models.Product.name, models.Supplier.company_name).all()
+
+    return results
+
+
+@router.put("/business/prices/mappings/{price_id}", response_model=schemas.ProductMappingResponse)
+def update_product_mapping(
+    price_id: int,
+    mapping_data: schemas.MappingUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Оновлення артикулу постачальника для позиції прайс-листа менеджером"""
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки менеджерам.")
+
+    price_item = db.query(models.PriceList).filter(models.PriceList.price_id == price_id).first()
+    if not price_item:
+        raise HTTPException(status_code=404, detail="Позицію у прайс-листі не знайдено.")
+
+    price_item.sup_article = mapping_data.sup_article
+    db.commit()
+
+    # Повертаємо оновлений маппінг
+    result = db.query(
+        models.PriceList.price_id,
+        models.PriceList.product_id,
+        models.Product.name.label("product_name"),
+        models.Product.internal_sku.label("internal_sku"),
+        models.Category.name.label("category_name"),
+        models.PriceList.supplier_id,
+        models.Supplier.company_name.label("company_name"),
+        models.PriceList.sup_article.label("sup_article"),
+        models.PriceList.wh_price.label("wh_price")
+    ).join(models.Product, models.PriceList.product_id == models.Product.product_id)\
+     .join(models.Category, models.Product.category_id == models.Category.category_id)\
+     .join(models.Supplier, models.PriceList.supplier_id == models.Supplier.supplier_id)\
+     .filter(models.PriceList.price_id == price_id).first()
+
+    return result

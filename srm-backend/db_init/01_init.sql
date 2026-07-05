@@ -181,6 +181,52 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION fn_prevent_suppliers_delete() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM orders 
+        WHERE supplier_id = OLD.supplier_id AND status NOT IN ('Delivered', 'Cancelled')
+    ) THEN
+        RAISE EXCEPTION 'Неможливо видалити постачальника (ID: %) з активними замовленнями', OLD.supplier_id;
+    END IF;
+    RETURN OLD;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION log_price_changes() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF (OLD.wh_price <> NEW.wh_price) THEN
+        INSERT INTO price_history (supplier_id, product_id, old_price, new_price)
+        VALUES (OLD.supplier_id, OLD.product_id, OLD.wh_price, NEW.wh_price);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fn_refresh_suppliers_rating() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE suppliers
+    SET rating = (
+        SELECT AVG(perf.total_score)
+        FROM performance_records perf
+        JOIN product_batches pb ON perf.batch_id = pb.batch_id
+        JOIN orders o ON pb.order_id = o.order_id
+        WHERE o.supplier_id = (
+            SELECT supplier_id FROM orders 
+            WHERE order_id = (SELECT order_id FROM product_batches WHERE batch_id = NEW.batch_id)
+        )
+    )
+    WHERE supplier_id = (
+        SELECT supplier_id FROM orders 
+        WHERE order_id = (SELECT order_id FROM product_batches WHERE batch_id = NEW.batch_id)
+    );
+    RETURN NEW;
+END;
+$$;
+
 -- ==========================================
 -- 4. СТВОРЕННЯ ТРИГЕРІВ
 -- ==========================================
@@ -192,6 +238,18 @@ FOR EACH ROW EXECUTE FUNCTION check_order_status_change();
 CREATE TRIGGER trg_prevent_product_delete 
 BEFORE DELETE ON products 
 FOR EACH ROW EXECUTE FUNCTION prevent_product_delete();
+
+CREATE TRIGGER tr_check_suppliers_delete
+BEFORE DELETE ON suppliers
+FOR EACH ROW EXECUTE FUNCTION fn_prevent_suppliers_delete();
+
+CREATE TRIGGER tr_log_price_change
+AFTER UPDATE ON price_lists
+FOR EACH ROW EXECUTE FUNCTION log_price_changes();
+
+CREATE TRIGGER tr_update_rating_after_perf
+AFTER INSERT OR UPDATE ON performance_records
+FOR EACH ROW EXECUTE FUNCTION fn_refresh_suppliers_rating();
 
 -- ==========================================
 -- 5. ЗАПОВНЕННЯ ТЕСТОВИМИ ДАНИМИ

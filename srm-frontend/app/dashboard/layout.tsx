@@ -66,8 +66,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Загальний Header */}
       <header className="flex items-center justify-between px-8 py-4 bg-white border-b shadow-sm">
-        <div className="text-2xl font-black text-blue-700">
-          <Link href="/dashboard">SRM System</Link>
+        <div className="flex items-center gap-10">
+          <div className="text-2xl font-black text-blue-700">
+            <Link href="/dashboard">SRM System</Link>
+          </div>
+          {user.role === 'MANAGER' && (
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/dashboard/manager" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                Замовлення
+              </Link>
+              <Link href="/dashboard/manager/analytics" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager/analytics' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                📊 Аналітика
+              </Link>
+              <Link href="/dashboard/manager/mappings" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager/mappings' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                🔗 Маппінг
+              </Link>
+              <Link href="/dashboard/manager/expirations" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/manager/expirations' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                ⚠️ Терміни придатності
+              </Link>
+            </nav>
+          )}
+          {user.role === 'SUPPLIER' && (
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/dashboard/supplier" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/supplier' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                Кабінет
+              </Link>
+            </nav>
+          )}
         </div>
         <div className="flex items-center gap-6">
           <Link href="/dashboard/profile" className="flex flex-col text-right transition rounded hover:bg-gray-50 p-1 px-2 cursor-pointer">

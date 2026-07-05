@@ -192,3 +192,90 @@ def update_order_status(
     db.refresh(order)
     
     return order
+
+
+@router.post("/bulk", response_model=list[schemas.OrderResponse], status_code=status.HTTP_201_CREATED)
+def create_bulk_orders(
+    bulk_data: schemas.BulkOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Групове створення замовлень (інвойсів).
+    Приймає список товарів з різними постачальниками, групує їх за постачальником
+    і створює окреме замовлення (Draft) для кожного.
+    """
+    if current_user.role != "MANAGER":
+        raise HTTPException(status_code=403, detail="Тільки менеджер може створювати замовлення.")
+
+    if not bulk_data.items:
+        raise HTTPException(status_code=400, detail="Список товарів не може бути порожнім.")
+
+    # Групуємо товари за supplier_id
+    grouped_items = {}
+    for item in bulk_data.items:
+        grouped_items.setdefault(item.supplier_id, []).append(item)
+
+    created_orders = []
+
+    try:
+        for supplier_id, items in grouped_items.items():
+            # Перевіряємо постачальника
+            supplier = db.query(models.Supplier).filter(models.Supplier.supplier_id == supplier_id).first()
+            if not supplier:
+                raise HTTPException(status_code=404, detail=f"Постачальника з ID {supplier_id} не знайдено.")
+
+            # Створюємо шапку замовлення
+            new_order = models.Order(
+                supplier_id=supplier_id,
+                status="Draft",
+                total_sum=0
+            )
+            db.add(new_order)
+            db.flush()  # Отримуємо order_id
+
+            calculated_total = 0
+            for item in items:
+                # Перевіряємо продукт
+                product = db.query(models.Product).filter(models.Product.product_id == item.product_id).first()
+                if not product:
+                    raise HTTPException(status_code=404, detail=f"Товар з ID {item.product_id} не знайдено.")
+
+                line_sum = item.ord_batches * item.batch_size * item.price_at_ord
+                calculated_total += line_sum
+
+                new_item = models.OrderItem(
+                    order_id=new_order.order_id,
+                    product_id=item.product_id,
+                    sup_article=item.sup_article,
+                    ord_batches=item.ord_batches,
+                    batch_size=item.batch_size,
+                    price_at_ord=item.price_at_ord
+                )
+                db.add(new_item)
+
+            new_order.total_sum = calculated_total
+            created_orders.append(new_order)
+
+        db.commit()
+        
+        # Робимо refresh для кожного замовлення, щоб підтягнути зв'язки
+        # Використовуємо joinedload для уникнення N+1 проблеми при серіалізації
+        refreshed_orders = []
+        for order in created_orders:
+            refreshed = db.query(models.Order).options(
+                joinedload(models.Order.supplier),
+                joinedload(models.Order.items).joinedload(models.OrderItem.product),
+                joinedload(models.Order.batches)
+            ).filter(models.Order.order_id == order.order_id).first()
+            if refreshed:
+                refreshed_orders.append(refreshed)
+            
+        return refreshed_orders
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Помилка при створенні групових замовлень: {str(e)}")

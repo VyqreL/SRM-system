@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 import uuid
 from sqlalchemy import text
+from datetime import date, timedelta
 
 # Імпортуємо наш додаток FastAPI
 from app.main import app
@@ -224,3 +225,134 @@ def test_order_workflow_and_permissions(db: SessionLocal):
     # Постачальник 2 намагається отримати замовлення Постачальника 1 -> ПОМИЛКА 403
     res_get_id_fail = client.get(f"/orders/{order_id}", headers=s2_headers)
     assert res_get_id_fail.status_code == 403
+
+
+def test_bulk_order_and_business_features(db: SessionLocal):
+    """
+    Тест №5: Перевірка групового створення замовлень, аналітики, 
+    термінів придатності та маппінгу номенклатур.
+    """
+    # 1. --- SETUP: Створюємо Менеджера та двох Постачальників ---
+    manager_email = f"manager_bulk_{uuid.uuid4().hex[:6]}@srm.com"
+    hashed_pwd = security.get_password_hash("password123")
+    db.execute(text(f"INSERT INTO users (email, password_hash, role, is_active) VALUES ('{manager_email}', '{hashed_pwd}', 'MANAGER', true)"))
+    db.commit()
+    manager_token = get_token(manager_email, "password123")
+    manager_headers = {"Authorization": f"Bearer {manager_token}"}
+
+    # Постачальник A
+    sA_email = f"supp_a_{uuid.uuid4().hex[:6]}@srm.com"
+    client.post("/auth/register/supplier", json={"email": sA_email, "password": "password123"})
+    sA_token = get_token(sA_email, "password123")
+    sA_headers = {"Authorization": f"Bearer {sA_token}"}
+    client.post("/users/suppliers/profile", json={"company_name": "Supplier A", "edrpou": f"888{uuid.uuid4().hex[:5]}"}, headers=sA_headers)
+    sA_profile = db.query(models.Supplier).filter(models.Supplier.company_name == "Supplier A").first()
+    assert sA_profile is not None
+    sA_id = sA_profile.supplier_id
+
+    # Постачальник B
+    sB_email = f"supp_b_{uuid.uuid4().hex[:6]}@srm.com"
+    client.post("/auth/register/supplier", json={"email": sB_email, "password": "password123"})
+    sB_token = get_token(sB_email, "password123")
+    sB_headers = {"Authorization": f"Bearer {sB_token}"}
+    client.post("/users/suppliers/profile", json={"company_name": "Supplier B", "edrpou": f"999{uuid.uuid4().hex[:5]}"}, headers=sB_headers)
+    sB_profile = db.query(models.Supplier).filter(models.Supplier.company_name == "Supplier B").first()
+    assert sB_profile is not None
+    sB_id = sB_profile.supplier_id
+
+    # Очищуємо залишки з попередніх запусків тестів з урахуванням тригерів та зовнішніх ключів
+    db.execute(text("DELETE FROM order_items WHERE product_id IN (1001, 1002)"))
+    db.execute(text("DELETE FROM price_lists WHERE product_id IN (1001, 1002)"))
+    db.execute(text("DELETE FROM product_batches WHERE product_id IN (1001, 1002)"))
+    db.execute(text("DELETE FROM products WHERE product_id IN (1001, 1002)"))
+    db.execute(text("DELETE FROM categories WHERE category_id = 1001"))
+    db.commit()
+
+    # Товар 1 та Товар 2
+    db.execute(text("INSERT INTO categories (category_id, name) VALUES (1001, 'Category 1001') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO products (product_id, category_id, internal_sku, name, unit) VALUES (1001, 1001, 'SKU-1001', 'Milk A', 'pcs') ON CONFLICT DO NOTHING"))
+    db.execute(text("INSERT INTO products (product_id, category_id, internal_sku, name, unit) VALUES (1002, 1001, 'SKU-1002', 'Milk B', 'pcs') ON CONFLICT DO NOTHING"))
+    db.commit()
+
+    # Створюємо ціни в прайс-листі
+    # Постачальник A пропонує товар 1001
+    db.execute(text(f"INSERT INTO price_lists (supplier_id, product_id, sup_article, wh_price, moq_batches, batch_size) VALUES ({sA_id}, 1001, 'ART-A-1', 50.00, 2, 1.0) ON CONFLICT DO NOTHING"))
+    # Постачальник B пропонує товар 1001 та 1002
+    db.execute(text(f"INSERT INTO price_lists (supplier_id, product_id, sup_article, wh_price, moq_batches, batch_size) VALUES ({sB_id}, 1001, 'ART-B-1', 48.00, 5, 1.0) ON CONFLICT DO NOTHING"))
+    db.execute(text(f"INSERT INTO price_lists (supplier_id, product_id, sup_article, wh_price, moq_batches, batch_size) VALUES ({sB_id}, 1002, 'ART-B-2', 75.00, 1, 1.0) ON CONFLICT DO NOTHING"))
+    db.commit()
+
+    # 2. --- ТЕСТ GET /business/products/offers ---
+    res_offers = client.get("/business/products/offers", headers=manager_headers)
+    assert res_offers.status_code == 200
+    offers_data = res_offers.json()
+    # Перевіряємо наявність пропозицій для товару 1001 (має бути дві пропозиції від A та B)
+    milk_a_offers = next(p for p in offers_data if p["product_id"] == 1001)
+    assert len(milk_a_offers["offers"]) == 2
+
+    # 3. --- ТЕСТ POST /orders/bulk ---
+    bulk_payload = {
+        "items": [
+            {
+                "product_id": 1001,
+                "supplier_id": sA_id,
+                "ord_batches": 4,
+                "batch_size": 1.0,
+                "price_at_ord": 50.00,
+                "sup_article": "ART-A-1"
+            },
+            {
+                "product_id": 1002,
+                "supplier_id": sB_id,
+                "ord_batches": 2,
+                "batch_size": 1.0,
+                "price_at_ord": 75.00,
+                "sup_article": "ART-B-2"
+            }
+        ]
+    }
+    res_bulk = client.post("/orders/bulk", json=bulk_payload, headers=manager_headers)
+    assert res_bulk.status_code == 201
+    bulk_orders = res_bulk.json()
+    assert len(bulk_orders) == 2  # Створилося 2 окремих замовлення для A та B
+
+    # Перевіримо суми
+    order_A = next(o for o in bulk_orders if o["supplier"]["supplier_id"] == sA_id)
+    order_B = next(o for o in bulk_orders if o["supplier"]["supplier_id"] == sB_id)
+    assert float(order_A["total_sum"]) == 4 * 1.0 * 50.0
+    assert float(order_B["total_sum"]) == 2 * 1.0 * 75.0
+
+    # 4. --- ТЕСТ GET /business/prices/mappings та PUT ---
+    res_mappings = client.get("/business/prices/mappings", headers=manager_headers)
+    assert res_mappings.status_code == 200
+    mappings = res_mappings.json()
+    assert len(mappings) >= 3
+
+    # Знаходимо запис прайсу для оновлення артикулу
+    mapping_to_update = next(m for m in mappings if m["supplier_id"] == sA_id and m["product_id"] == 1001)
+    price_id = mapping_to_update["price_id"]
+
+    res_put_mapping = client.put(f"/business/prices/mappings/{price_id}", json={"sup_article": "ART-A-NEW"}, headers=manager_headers)
+    assert res_put_mapping.status_code == 200
+    assert res_put_mapping.json()["sup_article"] == "ART-A-NEW"
+
+    # 5. --- ТЕСТ GET /business/analytics ---
+    res_analytics = client.get("/business/analytics?period=week", headers=manager_headers)
+    assert res_analytics.status_code == 200
+    analytics = res_analytics.json()
+    assert "total_expenses" in analytics
+    assert "total_earnings" in analytics
+    assert len(analytics["chart_data"]) > 0
+
+    # 6. --- ТЕСТ GET /business/batches/expiration-warnings ---
+    # Створимо партію товару з терміном придатності через 15 днів (менше 30 днів)
+    today = date.today()
+    exp_date_near = today + timedelta(days=15)
+    db.execute(text(f"INSERT INTO product_batches (product_id, order_id, prod_date, exp_date, curr_qty, status) VALUES (1001, {order_A['order_id']}, '{today}', '{exp_date_near}', 100.0, 'Active')"))
+    db.commit()
+
+    res_warnings = client.get("/business/batches/expiration-warnings", headers=manager_headers)
+    assert res_warnings.status_code == 200
+    warnings = res_warnings.json()
+    assert len(warnings) > 0
+    assert any(w["product_id"] == 1001 and w["days_left"] == 15 for w in warnings)

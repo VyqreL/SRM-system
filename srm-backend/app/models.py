@@ -19,6 +19,16 @@ class User(Base):
 
 
 # Блок 2: Товарний каталог
+class Category(Base):
+    __tablename__ = "categories"
+
+    category_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+
+    products = relationship("Product", back_populates="category")
+
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -27,6 +37,8 @@ class Product(Base):
     internal_sku = Column(String(50), unique=True, nullable=False)
     name = Column(String(255), nullable=False)
     unit = Column(String(10), nullable=False)
+    
+    category = relationship("Category", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
 
 

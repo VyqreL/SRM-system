@@ -233,3 +233,77 @@ class ReorderSuggestionResponse(BaseModel):
     batch_size: Decimal
     moq_batches: int
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Нові схеми для розширеного функціоналу SRM ---
+
+# 1. Групові замовлення
+class BulkOrderItem(BaseModel):
+    product_id: int
+    supplier_id: int
+    ord_batches: int = Field(gt=0, description="Кількість упаковок")
+    batch_size: Decimal = Field(gt=0)
+    price_at_ord: Decimal = Field(ge=0)
+    sup_article: Optional[str] = None
+
+class BulkOrderCreate(BaseModel):
+    items: List[BulkOrderItem]
+
+# 2. Аналітика
+class AnalyticsChartPoint(BaseModel):
+    date: str
+    expenses: Decimal
+    earnings: Decimal
+
+class AnalyticsDashboardResponse(BaseModel):
+    total_expenses: Decimal
+    total_earnings: Decimal
+    total_orders: int
+    otif_rate: Decimal
+    quality_rate: Decimal
+    timeliness_rate: Decimal
+    chart_data: List[AnalyticsChartPoint]
+
+# 3. Попередження про терміни придатності
+class ExpirationWarningResponse(BaseModel):
+    batch_id: int
+    product_id: int
+    product_name: str
+    internal_sku: str
+    exp_date: date
+    curr_qty: Decimal
+    days_left: int
+    status: str
+
+# 4. Маппінг артикулів
+class MappingUpdate(BaseModel):
+    sup_article: str = Field(..., max_length=50)
+
+class ProductMappingResponse(BaseModel):
+    price_id: int
+    product_id: int
+    product_name: str
+    internal_sku: str
+    category_name: str
+    supplier_id: int
+    company_name: str
+    sup_article: Optional[str] = None
+    wh_price: Decimal
+    model_config = ConfigDict(from_attributes=True)
+
+# 5. Пропозиції постачальників для товарів
+class SupplierOffer(BaseModel):
+    supplier_id: int
+    company_name: str
+    wh_price: Decimal
+    moq_batches: int
+    batch_size: Decimal
+    sup_article: Optional[str] = None
+    rating: Decimal
+
+class ProductOffersResponse(BaseModel):
+    product_id: int
+    name: str
+    internal_sku: str
+    unit: str
+    offers: List[SupplierOffer]

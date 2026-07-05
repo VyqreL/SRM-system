@@ -27,6 +27,7 @@ interface Order {
 
 export default function ManagerDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [warnings, setWarnings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Завантаження замовлень з бекенду
@@ -52,8 +53,28 @@ export default function ManagerDashboard() {
     }
   };
 
+  // Завантаження попереджень про терміни придатності
+  const fetchWarnings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/business/batches/expiration-warnings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setWarnings(data.slice(0, 5)); // Беремо топ-5 критичних
+      }
+    } catch (error) {
+      console.error('Помилка завантаження попереджень:', error);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
+    fetchWarnings();
   }, []);
 
   // Функція для зміни статусу (реальний PATCH запит на бекенд)
@@ -86,6 +107,29 @@ export default function ManagerDashboard() {
   return (
     <div className="p-8">
       <div className="max-w-6xl mx-auto">
+        {/* Віджет попередження про терміни придатності */}
+        {warnings.length > 0 && (
+          <div className="mb-6 p-4 bg-orange-50 border-l-4 border-orange-500 rounded-r-lg shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-orange-800 font-bold">
+                <span>⚠️ Попередження:</span>
+                <span>Виявлено товари на складі, термін придатності яких спливає!</span>
+              </div>
+              <Link href="/dashboard/manager/expirations" className="text-sm font-bold text-orange-600 hover:text-orange-800 underline transition">
+                Детальний контроль &rarr;
+              </Link>
+            </div>
+            <div className="text-xs text-orange-700 space-y-1">
+              {warnings.map(w => (
+                <div key={w.batch_id} className="flex justify-between max-w-2xl">
+                  <span>{w.product_name} ({w.internal_sku}) - Залишок: {Number(w.curr_qty).toFixed(0)} шт</span>
+                  <span className="font-bold text-red-600">Залишилося днів: {w.days_left} (до {new Date(w.exp_date).toLocaleDateString()})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-800">Кабінет Менеджера (Закупника)</h1>
           <div className="flex space-x-4">
