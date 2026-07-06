@@ -316,7 +316,7 @@ export default function SupplierPricesPage() {
                   <th className="px-6 py-4 text-right">Ціна (грн)</th>
                   <th className="px-6 py-4 text-center">Розмір упаковки</th>
                   <th className="px-6 py-4 text-center">MOQ (упаковок)</th>
-                  <th className="px-6 py-4 text-center">Дії</th>
+                  <th className="px-6 py-4">Дії</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
@@ -345,7 +345,7 @@ export default function SupplierPricesPage() {
                         <td className="px-6 py-4 text-center font-mono">
                           {item.moq_batches} уп.
                         </td>
-                        <td className="px-6 py-4 text-center space-x-2">
+                        <td className="px-6 py-4 space-x-2">
                           <button
                             onClick={() => handleEditClick(item)}
                             className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"

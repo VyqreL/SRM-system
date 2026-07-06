@@ -223,7 +223,7 @@ export default function OrderDetailsPage() {
                 <th className="px-6 py-4 text-right">К-сть (уп.)</th>
                 <th className="px-6 py-4 text-right">Всього од.</th>
                 <th className="px-6 py-4 text-right">Сума</th>
-                {(order.status === 'Delivered' && userRole === 'MANAGER') && <th className="px-6 py-4 text-center">Прийом</th>}
+                {(order.status === 'Delivered' && userRole === 'MANAGER') && <th className="px-6 py-4">Прийом</th>}
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700">
@@ -236,7 +236,7 @@ export default function OrderDetailsPage() {
                   <td className="px-6 py-4 text-right">{item.ord_batches * item.batch_size}</td>
                   <td className="px-6 py-4 text-right font-bold">{Number(item.line_total).toFixed(2)}</td>
                   {(order.status === 'Delivered' && userRole === 'MANAGER') && (
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4">
                       {order.batches.find(b => b.product_id === item.product.product_id) ? (
                         <span className="text-green-600 font-semibold text-sm">✓ Прийнято</span>
                       ) : (
