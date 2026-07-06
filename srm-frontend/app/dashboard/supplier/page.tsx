@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 
 // --- Типи даних ---
@@ -14,6 +14,7 @@ interface OrderItem {
 interface SupplierShort {
   supplier_id: number;
   company_name: string;
+  rating: number;
 }
 
 interface Order {
@@ -28,6 +29,12 @@ interface Order {
 export default function SupplierDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Стани для фільтрації та сортування
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<'order_id' | 'total_sum' | 'created_at'>('order_id');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const fetchOrders = async () => {
     try {
@@ -87,35 +94,124 @@ export default function SupplierDashboard() {
     }
   };
 
+  // Логіка фільтрації та сортування замовлень постачальника
+  const processedOrders = useMemo(() => {
+    let result = [...orders];
+
+    // 1. Фільтрація за статусом
+    if (statusFilter) {
+      result = result.filter(o => o.status === statusFilter);
+    }
+
+    // 2. Текстовий пошук за ID замовлення
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(o => 
+        o.order_id.toString().includes(query)
+      );
+    }
+
+    // 3. Сортування
+    result.sort((a, b) => {
+      let valA: any = a[sortColumn];
+      let valB: any = b[sortColumn];
+
+      if (sortColumn === 'created_at') {
+        valA = new Date(a.created_at).getTime();
+        valB = new Date(b.created_at).getTime();
+      } else if (sortColumn === 'total_sum') {
+        valA = Number(a.total_sum);
+        valB = Number(b.total_sum);
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [orders, statusFilter, searchQuery, sortColumn, sortDirection]);
+
+  const handleSort = (column: typeof sortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  const renderSortIndicator = (column: typeof sortColumn) => {
+    if (sortColumn !== column) return <span className="text-gray-300 opacity-40"> ⇅</span>;
+    return sortDirection === 'asc' ? ' ▲' : ' ▼';
+  };
+
   if (loading) return <div className="p-10 text-xl text-center">Завантаження даних...</div>;
 
   return (
     <div className="p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">Кабінет Постачальника</h1>
+        </div>
+
+        {/* Панель фільтрів */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+          <div className="flex-1">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Пошук за номером замовлення</label>
+            <input
+              type="text"
+              placeholder="Введіть номер замовлення (ID)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Статус замовлення</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
+            >
+              <option value="">Усі статуси</option>
+              <option value="Draft">Draft</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Sent">Sent</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto bg-white rounded-lg shadow-md">
           <table className="w-full text-left border-collapse">
-            <thead className="text-sm text-gray-600 uppercase bg-gray-100 border-b">
-              <tr>
-                <th className="px-6 py-4">ID Замовлення</th>
-                <th className="px-6 py-4">Сума (грн)</th>
-                <th className="px-6 py-4">Статус</th>
-                <th className="px-6 py-4">Дата створення</th>
+            <thead>
+              <tr className="text-sm text-gray-600 uppercase bg-gray-100 border-b select-none">
+                <th onClick={() => handleSort('order_id')} className="px-6 py-4 cursor-pointer hover:bg-gray-200 transition">
+                  ID Замовлення{renderSortIndicator('order_id')}
+                </th>
+                <th onClick={() => handleSort('total_sum')} className="px-6 py-4 cursor-pointer hover:bg-gray-200 transition">
+                  Сума (грн){renderSortIndicator('total_sum')}
+                </th>
+                <th className="px-6 py-4">
+                  Статус
+                </th>
+                <th onClick={() => handleSort('created_at')} className="px-6 py-4 cursor-pointer hover:bg-gray-200 transition">
+                  Дата створення{renderSortIndicator('created_at')}
+                </th>
                 <th className="px-6 py-4 text-center">Дії</th>
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700">
-              {orders.length === 0 ? (
+              {processedOrders.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                    У вас ще немає замовлень.
+                    Замовлень за вказаними фільтрами не знайдено.
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => (
+                processedOrders.map((order) => (
                   <tr key={order.order_id} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium">#{order.order_id}</td>
                     <td className="px-6 py-4 font-bold text-blue-600">{Number(order.total_sum).toFixed(2)}</td>
