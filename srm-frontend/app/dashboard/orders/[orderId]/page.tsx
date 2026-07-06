@@ -101,7 +101,7 @@ export default function OrderDetailsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          product_id: evalItem!.product_id,
+          product_id: evalItem!.product.product_id, // ВИПРАВЛЕНО БАГ: product_id знаходиться в evalItem.product.product_id
           order_id: order!.order_id,
           prod_date: evalForm.prod_date,
           exp_date: evalForm.exp_date,
@@ -110,7 +110,15 @@ export default function OrderDetailsPage() {
       });
       if (!batchRes.ok) {
         const errData = await batchRes.json();
-        throw new Error(errData.detail || 'Помилка при створенні партії (перевірте дати)');
+        let errMsg = 'Помилка при створенні партії (перевірте дати)';
+        if (typeof errData.detail === 'string') {
+          errMsg = errData.detail;
+        } else if (Array.isArray(errData.detail)) {
+          errMsg = errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ');
+        } else if (errData.detail && typeof errData.detail === 'object') {
+          errMsg = JSON.stringify(errData.detail);
+        }
+        throw new Error(errMsg);
       }
       const batchData = await batchRes.json();
 
@@ -127,7 +135,15 @@ export default function OrderDetailsPage() {
       });
       if (!perfRes.ok) {
          const errData = await perfRes.json();
-         throw new Error(errData.detail || 'Помилка при збереженні оцінки');
+         let errMsg = 'Помилка при збереженні оцінки';
+         if (typeof errData.detail === 'string') {
+           errMsg = errData.detail;
+         } else if (Array.isArray(errData.detail)) {
+           errMsg = errData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ');
+         } else if (errData.detail && typeof errData.detail === 'object') {
+           errMsg = JSON.stringify(errData.detail);
+         }
+         throw new Error(errMsg);
       }
 
       // Тихо оновлюємо дані замовлення, щоб з'явилась галочка
@@ -221,7 +237,7 @@ export default function OrderDetailsPage() {
                   <td className="px-6 py-4 text-right font-bold">{Number(item.line_total).toFixed(2)}</td>
                   {(order.status === 'Delivered' && userRole === 'MANAGER') && (
                     <td className="px-6 py-4 text-center">
-                      {order.batches.find(b => b.product_id === item.product_id) ? (
+                      {order.batches.find(b => b.product_id === item.product.product_id) ? (
                         <span className="text-green-600 font-semibold text-sm">✓ Прийнято</span>
                       ) : (
                         <button onClick={() => {
