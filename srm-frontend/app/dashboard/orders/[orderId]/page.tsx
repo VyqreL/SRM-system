@@ -55,7 +55,7 @@ export default function OrderDetailsPage() {
 
   // Стан для модального вікна оцінки
   const [evalItem, setEvalItem] = useState<OrderItem | null>(null);
-  const [evalForm, setEvalForm] = useState({ prod_date: '', exp_date: '', curr_qty: '', delta_days: 0, quality_rate: 1.0, total_score: 1.0 });
+  const [evalForm, setEvalForm] = useState({ prod_date: '', exp_date: '', curr_qty: '', delta_days: 0, quality_rate: 10, total_score: 10 });
   const [submittingEval, setSubmittingEval] = useState(false);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function OrderDetailsPage() {
     setSubmittingEval(true);
     try {
       const token = localStorage.getItem('token');
-      // 1. Створюємо партію (Прийомка на склад)
+      // 1. Створюємо партію (Прийом на склад)
       const batchRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/batches/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -122,15 +122,15 @@ export default function OrderDetailsPage() {
       }
       const batchData = await batchRes.json();
 
-      // 2. Зберігаємо оцінку ефективності
+      // 2. Зберігаємо оцінку ефективності (конвертуємо 0-10 в 0.0-1.0 для бекенду)
       const perfRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/performance/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           batch_id: batchData.batch_id,
           delta_days: evalForm.delta_days,
-          quality_rate: evalForm.quality_rate,
-          total_score: evalForm.total_score
+          quality_rate: evalForm.quality_rate / 10,
+          total_score: evalForm.total_score / 10
         })
       });
       if (!perfRes.ok) {
@@ -223,7 +223,7 @@ export default function OrderDetailsPage() {
                 <th className="px-6 py-4 text-right">К-сть (уп.)</th>
                 <th className="px-6 py-4 text-right">Всього од.</th>
                 <th className="px-6 py-4 text-right">Сума</th>
-                {(order.status === 'Delivered' && userRole === 'MANAGER') && <th className="px-6 py-4 text-center">Прийомка</th>}
+                {(order.status === 'Delivered' && userRole === 'MANAGER') && <th className="px-6 py-4 text-center">Прийом</th>}
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700">
@@ -242,7 +242,14 @@ export default function OrderDetailsPage() {
                       ) : (
                         <button onClick={() => {
                           setEvalItem(item);
-                          setEvalForm(prev => ({ ...prev, curr_qty: String(item.ord_batches * item.batch_size), prod_date: '', exp_date: '' }));
+                          setEvalForm({
+                            prod_date: '',
+                            exp_date: '',
+                            curr_qty: String(item.ord_batches * item.batch_size),
+                            delta_days: 0,
+                            quality_rate: 10,
+                            total_score: 10
+                          });
                         }} className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600 shadow-sm transition">
                           Оцінити
                         </button>
@@ -256,11 +263,11 @@ export default function OrderDetailsPage() {
         </div>
       </div>
 
-      {/* Модальне вікно прийомки та оцінки */}
+      {/* Модальне вікно прийому та оцінки */}
       {evalItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Прийомка: {evalItem.product.name}</h3>
+            <h3 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Прийом: {evalItem.product.name}</h3>
             <div className="space-y-4 text-sm">
               <div>
                 <label className="block text-gray-700 font-bold mb-1">Фактична кількість (од.)</label>
@@ -284,13 +291,13 @@ export default function OrderDetailsPage() {
                     <input type="number" min="0" value={evalForm.delta_days} onChange={e => setEvalForm({...evalForm, delta_days: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
                   </div>
                   <div>
-                    <label className="block text-gray-700 font-bold mb-1">Якість (0-1)</label>
-                    <input type="number" step="0.01" min="0" max="1" value={evalForm.quality_rate} onChange={e => setEvalForm({...evalForm, quality_rate: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
+                    <label className="block text-gray-700 font-bold mb-1">Якість (0-10)</label>
+                    <input type="number" min="0" max="10" step="1" value={evalForm.quality_rate} onChange={e => setEvalForm({...evalForm, quality_rate: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Загальний бал (0-1)</label>
-                  <input type="number" step="0.01" min="0" max="1" value={evalForm.total_score} onChange={e => setEvalForm({...evalForm, total_score: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
+                  <label className="block text-gray-700 font-bold mb-1">Загальний бал (0-10)</label>
+                  <input type="number" min="0" max="10" step="1" value={evalForm.total_score} onChange={e => setEvalForm({...evalForm, total_score: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
                 </div>
               </div>
             </div>

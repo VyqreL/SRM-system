@@ -74,7 +74,7 @@ def receive_product_batch(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Прийомка товару на склад (створення партії). Доступно тільки менеджерам."""
+    """Прийом товару на склад (створення партії). Доступно тільки менеджерам."""
     if current_user.role != "MANAGER":
         raise HTTPException(status_code=403, detail="Тільки менеджер може приймати товар на склад")
 

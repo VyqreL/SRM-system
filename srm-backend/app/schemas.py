@@ -133,7 +133,7 @@ class OrderItemResponse(ORMBase):
     line_total: Optional[Decimal] = None
     product: ProductShortResponse
 
-# --- Схеми для Партій товару (Прийомка на склад) ---
+# --- Схеми для Партій товару (Прийом на склад) ---
 class BatchCreate(BaseModel):
     product_id: int
     order_id: int
