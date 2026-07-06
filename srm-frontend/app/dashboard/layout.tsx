@@ -94,6 +94,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link href="/dashboard/supplier" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/supplier' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
                 Кабінет
               </Link>
+              <Link href="/dashboard/supplier/prices" className={`text-sm font-bold transition hover:text-blue-700 ${pathname === '/dashboard/supplier/prices' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-gray-600'}`}>
+                🏷️ Керування цінами
+              </Link>
             </nav>
           )}
         </div>

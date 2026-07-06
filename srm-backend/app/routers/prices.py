@@ -125,3 +125,12 @@ def get_price_history(price_id: int, db: Session = Depends(get_db), current_user
         models.PriceHistory.product_id == price_obj.product_id
     ).order_by(models.PriceHistory.change_date.desc()).all()
     return history
+
+@router.get("/products", response_model=List[schemas.ProductResponse])
+def get_all_products(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Отримати список всіх товарів у системі (доступно всім авторизованим користувачам)"""
+    products = db.query(models.Product).order_by(models.Product.name).all()
+    return products

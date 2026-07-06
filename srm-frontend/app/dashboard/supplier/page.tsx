@@ -29,27 +29,27 @@ export default function SupplierDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+  const fetchOrders = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-        if (res.ok) {
-          const data = await res.json();
-          setOrders(data);
-        } else {
-          console.error('Не вдалося завантажити замовлення');
-        }
-      } catch (err: any) {
-        console.error('Помилка мережі:', err);
-      } finally {
-        setLoading(false);
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data);
+      } else {
+        console.error('Не вдалося завантажити замовлення');
       }
-    };
+    } catch (err: any) {
+      console.error('Помилка мережі:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchOrders();
   }, []);
 
@@ -74,6 +74,16 @@ export default function SupplierDashboard() {
     } catch (error) {
       console.error('Помилка мережі:', error);
       alert('Помилка мережі');
+    }
+  };
+
+  const handleCancelOrder = async (orderId: number) => {
+    const isConfirmed = confirm(
+      `Ви впевнені, що хочете СКАСУВАТИ замовлення #${orderId}?\n\n` +
+      `Зверніть увагу: це скасує поставку, і замовлення перейде в статус Cancelled.`
+    );
+    if (isConfirmed) {
+      await handleStatusChange(orderId, 'Cancelled');
     }
   };
 
@@ -125,18 +135,29 @@ export default function SupplierDashboard() {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                       </Link>
                       {order.status === 'Confirmed' && (
-                        <button 
-                          onClick={() => handleStatusChange(order.order_id, 'Sent')}
-                          className="px-3 py-1 text-white bg-purple-500 rounded hover:bg-purple-600 transition"
-                        >
-                          Відправити замовлення
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => handleStatusChange(order.order_id, 'Sent')}
+                            className="px-3 py-1 text-white bg-purple-500 rounded hover:bg-purple-600 transition"
+                          >
+                            Відправити замовлення
+                          </button>
+                          <button 
+                            onClick={() => handleCancelOrder(order.order_id)}
+                            className="px-3 py-1 text-white bg-red-500 rounded hover:bg-red-600 transition"
+                          >
+                            Скасувати замовлення
+                          </button>
+                        </>
                       )}
                       {order.status === 'Sent' && (
                         <span className="text-gray-400 italic">В дорозі</span>
                       )}
                       {order.status === 'Delivered' && (
                         <span className="text-green-600 font-semibold">Доставлено</span>
+                      )}
+                      {order.status === 'Cancelled' && (
+                        <span className="text-red-500 font-semibold">Скасовано</span>
                       )}
                       {order.status === 'Draft' && (
                         <span className="text-gray-400 italic">На етапі створення</span>
