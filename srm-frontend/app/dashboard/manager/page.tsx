@@ -102,6 +102,16 @@ export default function ManagerDashboard() {
     }
   };
 
+  const handleCancelOrder = async (orderId: number) => {
+    const isConfirmed = confirm(
+      `Ви впевнені, що хочете СКАСУВАТИ замовлення #${orderId}?\n\n` +
+      `Це замовлення буде переведено в статус Cancelled.`
+    );
+    if (isConfirmed) {
+      await handleStatusChange(orderId, 'Cancelled');
+    }
+  };
+
   if (loading) return <div className="p-10 text-xl text-center">Завантаження даних...</div>;
 
   return (
@@ -188,12 +198,20 @@ export default function ManagerDashboard() {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                       </Link>
                       {order.status === 'Draft' && (
-                        <button 
-                          onClick={() => handleStatusChange(order.order_id, 'Confirmed')}
-                          className="px-3 py-1 text-white bg-blue-500 rounded hover:bg-blue-600 transition"
-                        >
-                          Підтвердити
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => handleStatusChange(order.order_id, 'Confirmed')}
+                            className="px-3 py-1 text-white bg-blue-500 rounded hover:bg-blue-600 transition"
+                          >
+                            Підтвердити
+                          </button>
+                          <button 
+                            onClick={() => handleCancelOrder(order.order_id)}
+                            className="px-3 py-1 text-white bg-red-500 rounded hover:bg-red-600 transition"
+                          >
+                            Скасувати
+                          </button>
+                        </>
                       )}
                       {order.status === 'Sent' && (
                         <button 
@@ -208,6 +226,9 @@ export default function ManagerDashboard() {
                       )}
                       {(order.status === 'Delivered') && (
                         <span className="text-green-600 font-semibold">Доставлено</span>
+                      )}
+                      {(order.status === 'Cancelled') && (
+                        <span className="text-red-500 font-semibold">Скасовано</span>
                       )}
                     </td>
                   </tr>
