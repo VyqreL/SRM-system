@@ -195,7 +195,7 @@ export default function OrderDetailsPage() {
               <p className="text-gray-500 mt-1 flex items-center gap-2">
                 Постачальник: <span className="font-semibold text-gray-700">{order.supplier.company_name}</span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Рейтинг постачальника">
-                  ⭐ {Number(order.supplier.rating).toFixed(2)}
+                  ⭐ {Number(order.supplier.rating * 10).toFixed(2)}
                 </span>
               </p>
             </div>

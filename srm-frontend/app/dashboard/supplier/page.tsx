@@ -29,6 +29,7 @@ interface Order {
 export default function SupplierDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
 
   // Стани для фільтрації та сортування
   const [statusFilter, setStatusFilter] = useState('');
@@ -56,8 +57,24 @@ export default function SupplierDashboard() {
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/suppliers/profile`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data);
+      }
+    } catch (err) {
+      console.error('Помилка завантаження профілю:', err);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
+    fetchProfile();
   }, []);
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
@@ -151,8 +168,26 @@ export default function SupplierDashboard() {
   return (
     <div className="p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Кабінет Постачальника</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 border-b pb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">Кабінет Постачальника</h1>
+            {profile && (
+              <p className="text-sm text-gray-500 mt-1">
+                Компанія: <span className="font-semibold text-gray-700">{profile.company_name}</span> (ЄДРПОУ: {profile.edrpou})
+              </p>
+            )}
+          </div>
+          {profile && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 flex items-center gap-3 shadow-xs">
+              <span className="text-2xl">⭐</span>
+              <div>
+                <div className="text-[10px] font-bold text-yellow-800 uppercase tracking-wider">Ваш рейтинг</div>
+                <div className="text-lg font-black text-yellow-900 leading-none mt-0.5">
+                  {Number(profile.rating * 10).toFixed(2)} <span className="text-xs font-semibold text-yellow-700">/ 10</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Панель фільтрів */}

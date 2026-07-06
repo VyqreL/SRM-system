@@ -261,7 +261,7 @@ export default function CreateOrderPage() {
                           >
                             <span className="text-xs font-bold text-gray-800 truncate block max-w-[130px]">{offer.company_name}</span>
                             <span className="text-sm font-black text-blue-600 font-mono mt-1">{Number(offer.wh_price).toFixed(2)} грн</span>
-                            <span className="text-[10px] text-gray-500 mt-1">MOQ: {offer.moq_batches} уп. | ⭐ {Number(offer.rating).toFixed(2)}</span>
+                            <span className="text-[10px] text-gray-500 mt-1">MOQ: {offer.moq_batches} уп. | ⭐ {Number(offer.rating * 10).toFixed(2)}</span>
                           </button>
                         ))
                       ) : (
